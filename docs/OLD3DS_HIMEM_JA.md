@@ -18,7 +18,13 @@ InputRedirectionは作成せず、操作UDPの送信もリセットも行って�
 その後にヘッダー／寸法を受信専用で調査し、再接続試験で成功しています。
 起動直後を含めた安定性が確認済みという意味ではありません。
 
-**ChLoad_HIMEM＋日本語版USUMの受信、InputRedirectionの同時動作、リセット後の継続は未検証です。**
+**ChLoad_HIMEM＋日本語版USUMでは受信専用試験を行い、現在の状態では接続に失敗しました。**
+TCP 6464は約5秒でタイムアウト、上0枚／下0枚。追加診断もping応答0/3、ARPエントリーなし、
+TCPは `EHOSTUNREACH` でした。USUM起動後のAP接続喪失／ローカル無線への切り替えが候補ですが、
+3DS側の実状態やHzLog.log未確認のため断定できません。
+[開発者の無線モード資料](https://github.com/Eiim/Chokistream/wiki/Technical-info-on-bugs-and-quirks)にもUSUMが記載されています。
+この試験では操作ポートを使わず、ボタン入力・リセット・無線設定変更を行っていません。
+InputRedirectionの同時動作とリセット後の継続は未検証です。
 HOME受信の成功をHIMEMの成功に読み替えません。最新の実機記録はVALIDATION.mdも参照してください。
 
 ## 構成とプロトコルの違い
