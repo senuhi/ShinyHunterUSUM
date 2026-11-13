@@ -3,6 +3,42 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: USUM gameplay reception after post-HIMEM InputRedirection enablement
+
+The operator found **Start InputRedirection** (not running) after launching
+USUM through ChLoad_HIMEM, then manually enabled it and resumed the game.
+The reported LED remained cyan during gameplay. Two direct-receiver sessions
+were then run without `--send-b`:
+
+| Session | Elapsed | Upper complete passes | Lower complete passes | Result |
+| --- | --- | --- | --- | --- |
+| Initial receive-only | 10.055 s | 22 | 21 | Observed |
+| Separate sustained receive-only | 30.139 s | 61 | 62 | Observed through scheduled end |
+
+Saved PNGs were inspected: actual gameplay on the upper screen and the Rotom
+Dex/map on the lower screen, at native resolution and correct orientation.
+The 30 s pass assembly spans were 0.337–1.559 s upper and 0.306–1.559 s lower.
+No controller socket was constructed by either probe; no UDP 4950 input,
+button, reset, NFC patch or game-code change was sent/applied by the agent.
+The operator's enabling of the service is distinct from a remote button test.
+
+This confirms short gameplay video reception while InputRedirection is reported
+enabled on this Old 3DS/HIMEM configuration. It does NOT validate remote key
+response, reset continuity, gift navigation, Japanese recognition, shiny colour
+accuracy or long-duration stability. No live/hardware attestation was created.
+Private evidence is in ignored `captures/old3ds-usum-ir-enabled-passive*` folders.
+See [WIRELESS_NFC_JA.md](WIRELESS_NFC_JA.md) for source-backed investigation and limits.
+
+During the intervening suspended-HOME test, a reconnect observed 45 passes per
+screen over 33.658 s before the receiver stopped on the existing 2 s assembly
+limit. This receiver-initiated stop must NOT be reported as proof of a spontaneous
+TCP disconnect caused by game resume. After the operator reported resume/yellow
+LED, a separate connection attempt timed out after 5.006 s and received 0/0.
+The first connection on returning to HOME had an actual malformed 2x50 JPEG,
+which was rejected. These startup/freshness issues remain recorded separately.
+
+The earlier results below are retained as history of their respective states.
+
 ## Old 3DS update: direct receiver and observed HOME stream
 
 The video boundary now has independent NTR-HR and ChirunoMod adapters; no external

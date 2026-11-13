@@ -4,7 +4,8 @@
 改修元は `f49910affd7ed35b38af8e2b5b35499dcc554f0d`（v1.2.0）。
 日本語版USUMの **ベベノム、タイプ：ヌル（ポニ／エーテル）** の受け取り厳選に対応する構造を追加しています。
 
-**日本語版の実画像は未収集、3DS実機での映像・操作・色違い判定は未検証です。**
+**旧3DSのUSUMゲーム中で映像受信を確認しました。遠隔操作・色違い判定は未検証です。**
+日本語の受け取り認識テンプレートは未収集です。
 現在そのまま使えるのはネイティブGUI、自前の映像受信・画像収集、校正／再判定と安全停止の仕組みです。
 日本語テンプレートはプレースホルダで、実画像とルートごとの検証記録がないlive実行は拒否します。
 完全自動厳選の実機動作確認済みリリースではありません。
@@ -41,8 +42,8 @@ Homebrew以外では、Tkを含む[python.orgのmacOS版](https://www.python.org
 初代3DS LLは **ChirunoMod v0.2.2＋ChLoad_HIMEM** 用の自前受信を使います。
 **公式ChokistreamやJavaは不要です。** MacからTCP 6464へ直接接続します。
 [旧3DS・HIMEMの準備と受信専用テスト](docs/OLD3DS_HIMEM_JA.md) を先に実施してください。
-通常ChLoad＋HOMEでは実機の両画面受信を確認しましたが、HIMEM＋USUMとInputRedirectionの
-同時動作は未検証で、検証記録が揃うまで自動操作を許可しません。
+HIMEM＋USUM起動後にInputRedirectionを本体側で有効化し、ゲーム中の両画面受信を確認しました
+（30秒で上61枚・下62枚）。遠隔キー反映とリセット継続は未検証で、自動操作は引き続き拒否します。
 
 | 機種／映像方式 | Video backend | 映像の接続 |
 | --- | --- | --- |
@@ -56,7 +57,8 @@ NTR-HR独自のFEC/KCP形式は対象外です。
 共通の操作接続はLuma3DSの **InputRedirection UDP 4950** です。
 L+下+SELECT → RosalinaのMiscellaneous options → Start InputRedirectionで有効にし、
 3DSのIPを控えます。[Luma3DS公式資料](https://github.com/LumaTeam/Luma3DS/wiki/Rosalina)も参照してください。
-Old 3DSではHIMEM／ゲーム起動後の有効状態も再確認します。
+Old 3DSでは**HIMEM／ゲーム起動後**の有効状態を再確認します。Start表示は未起動、Stop表示は起動中です。
+今回、HIMEM起動後に未起動だったサービスを有効化して、ゲーム中の映像受信が復帰しました。
 
 Macと3DSを同じLANへ接続します。GUIの **PC IP** にMacのLAN IPv4（例 `192.168.0.29:8001`）、
 **3DS IP** に3DSのIPv4（例 `192.168.0.31`）、**Input UDP port** に4950を指定します。
