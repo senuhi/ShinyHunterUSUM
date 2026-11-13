@@ -51,7 +51,9 @@ def bytearray_not(arr):
 class LumaInputServer():
 	def __init__(self, server, port=4950):
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		port = 4950
+		if not 1 <= port <= 65535:
+			raise ValueError('Invalid InputRedirection port')
+		self.socket.settimeout(2)
 		self.socket.connect((server, port))
 
 		self.CPAD_BOUND = 0x5d0

@@ -62,7 +62,7 @@ class Recv(TabBase):
                      [227.95, 220.50, 215.24],
                      [184.07, 167.99, 172.58],
                      None]
-        
+
         self.ty   = img2BW(Image.open(self.picpath/'ty.bmp'))
         self.to   = img2BW(Image.open(self.picpath/'to.bmp'))
         self.mo   = img2BW(Image.open(self.picpath/'mo.bmp'))
@@ -78,7 +78,7 @@ class Recv(TabBase):
         self.bu   = img2BW(Image.open(self.picpath/'bu.bmp'))
         self.bg   = img2BW(Image.open(self.picpath/'bg.bmp'))
         self.Lv   = img2BW(Image.open(self.picpath/'Lv.bmp'))
-        
+
         #########################################################################
         ################################ Objects  ###############################
         #########################################################################
@@ -89,15 +89,15 @@ class Recv(TabBase):
 
         for i in range(3):
             self.recvbtn[i]=tk.Radiobutton(self.frame, width=8, anchor='w',
-                                             variable=self.recvvar, value=i)
+                                             variable=self.recvvar, value=i, command=self.target_switch)
             self.recvbtn[i].grid(row=0, column=i, padx=3, pady=8, sticky='w')
         for i in range(3):
             self.recvbtn[i+3]=tk.Radiobutton(self.frame, width=8, anchor='w',
-                                             variable=self.recvvar, value=i+3)
+                                             variable=self.recvvar, value=i+3, command=self.target_switch)
             self.recvbtn[i+3].grid(row=1, column=i, padx=3, pady=2, sticky='w')
         for i in range(1):
             self.recvbtn[i+6]=tk.Radiobutton(self.frame, width=8, anchor='w',
-                                             variable=self.recvvar, value=i+6)
+                                             variable=self.recvvar, value=i+6, command=self.target_switch)
             self.recvbtn[i+6].grid(row=2, column=i, padx=3, pady=8, sticky='w')
         self.recvbtn[0].config(text='Poipole')
         self.recvbtn[1].config(text='TN-Poni')
@@ -118,7 +118,52 @@ class Recv(TabBase):
     ############################### Functions ###################################
     #############################################################################
 
+    def main_procedure(self):
+        language, target, dry_run, profile_path = self.session_options
+        if target <= 2:
+            from gift_hunt import run_gift
+            run_gift(self, language, target, dry_run, profile_path)
+        else:
+            super().main_procedure()
+
+    def language_switch(self):
+        japanese = self.General.language.get() == 'Japanese'
+        labels = ('ベベノム', 'ヌル・ポニ', 'ヌル・エーテル') if japanese else ('Poipole', 'TN-Poni', 'TN-Aether')
+        for button, text in zip(self.recvbtn[:3], labels):
+            button.config(text=text, width=11)
+        if japanese and self.recvvar.get() > 2:
+            self.recvvar.set(0)
+        for button in self.recvbtn[3:]:
+            button.config(state='disabled' if japanese else 'normal')
+        if japanese or self.recvvar.get() <= 2:
+            self.boostvar.set(0)
+        self.boostbtn.config(state='disabled' if japanese or self.recvvar.get() <= 2 else 'normal')
+        # Japanese support is deliberately limited to the three gift routes.
+        for index in (0, 2):
+            self.General.TabButton[index].config(state='disabled' if japanese else 'normal')
+        if japanese:
+            self.General.Tab.set(1)
+
+    def target_switch(self):
+        if self.recvvar.get() <= 2:
+            self.boostvar.set(0)
+        self.boostbtn.config(state='disabled' if self.recvvar.get() <= 2 else 'normal')
+
+    def set_locked(self, locked):
+        if locked:
+            for button in self.recvbtn + [self.boostbtn]:
+                button.config(state='disabled')
+        else:
+            self.language_switch()
+
     def boostswitch(self):
+        if self.General.language.get() == 'Japanese':
+            self.language_switch()
+            return
+        if self.recvvar.get() <= 2:
+            self.boostvar.set(0)
+            self.boostbtn.config(state='disabled')
+
         # Boost mode only supports the first-row targets: lock the
         # other rows out and pull the selection back if needed
         if int(self.boostvar.get()) == 1:
@@ -284,7 +329,7 @@ class Recv(TabBase):
         for i in range(10):
             self.click(HIDButtons.B)
             time.sleep(0.05)
-            
+
         # Wait until menu shows up, remember place the pokemon label at first
         if not self.wait_for((27,211,38,222), self.bb, 11,
                                 button=HIDButtons.X, screen=0, ts=0.5):
@@ -365,6 +410,8 @@ class Recv(TabBase):
                     self.msgbox.MsgAppend(
                         f'Receive {self.General.start_count:04d}'
                         f' - {current_time} - Error {res:03d}')
+                    self.give_up()
+                    break
             else:
                 # Check the result, res close to 0 means shiny
                 self.msgbox.MsgAppend(

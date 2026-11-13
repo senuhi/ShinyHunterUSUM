@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
-import time, tempfile, socket, sys, msvcrt
+import time, tempfile, socket, sys, threading
+from platform_support import lock_slot, data_directory, capture_directory
+from ntr_transport import FrameStore
 from dataclasses import dataclass, field
 from PIL import Image
 from datetime import datetime
@@ -11,8 +13,8 @@ from boxBase import *
 class Setting:
     # One settings slot; the file keys stay unchanged ('3dsip' on
     # disk maps to the dsip attribute)
-    pcip:    str = ''
-    dsip:    str = ''
+    pcip:    str = '127.0.0.1:8001'
+    dsip:    str = '192.168.1.50'
     count:   int = 1
     currtab: int = 0
     move:    int = 0
@@ -34,32 +36,20 @@ class Setting:
     # Undock popup: background form (0/1/2) and half-size flag
     popform:   int = 0
     pophalf:   int = 0
-
-def lock_slot(folder, num):
-    # Try to lock settings slot `num`. Returns the open lock handle,
-    # or None when another running instance owns that slot.
-    # The handle must stay open for as long as the slot is in use;
-    # Windows releases the lock automatically when the process exits,
-    # so a crash can never leave a slot permanently stuck
-    f = open(folder / f'USUMShinyHunter-{num}.lock', 'a')
-    try:
-        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-        return f
-    except OSError:
-        f.close()
-        return None
+    language:  str = 'Japanese'
+    profile:   str = ''
 
 # Define the application class
 class General:
     def __init__(self, nb, msgbox):
-        
+
         ########################################################################
         ############################## Initialize ##############################
         ########################################################################
 
         self.nb          = nb
-        self.tabname     = 'General' 
-        self.frame       = nb.frame[nb.framename.index(self.tabname)] 
+        self.tabname     = 'General'
+        self.frame       = nb.frame[nb.framename.index(self.tabname)]
         self.framename   = nb.framename
         self.msgbox      = msgbox  # message box
         self.serverIP    = '192.168.137.1'
@@ -73,15 +63,15 @@ class General:
         self.RecordBusyHook = None # True while a video is still saving
         self.debugshot  = False    # live: save debug shots on error
         self.start_count = 1
+        self.stop_event = threading.Event()
+        self.stop_event.set()
+        self.frames = FrameStore()
+        self.dry_run = True
         # Load images
         self.bitmap = load_bitmaps(f'image0/{self.tabname}')
         # Setup the screenshot folder:
         # next to the exe when frozen, into ./pic in dev
-        if getattr(sys, 'frozen', False):
-            self.shotpath = Path(sys.executable).parent
-        else:
-            self.shotpath = Path('pic')
-            self.shotpath.mkdir(exist_ok=True)
+        self.shotpath = capture_directory()
 
         ########################################################################
         ################################ Objects ###############################
@@ -118,7 +108,7 @@ class General:
         self.Counter      .Entry.insert(0,'1')
         # Objects for Connect and return control button
         self.ConnectButton = tk.Button(self.Counter.frame,
-                                       image=self.bitmap['connect'])
+                                       image=self.bitmap['connect'], relief='raised')
         self.ConnectButton .pack(padx=0, pady=0, side='right')
         self.ResetButton   = tk.Button(self.Counter.frame,
                                        image=self.bitmap['return'],
@@ -136,7 +126,7 @@ class General:
             self.Tab.set(-1)
         else:
             self.Tab.set(0)
-            
+
         for i in range(len(self.TabButton)):
             self.TabButton[i]=tk.Radiobutton(self.frameTabCon,
                                              variable=self.Tab, value=i)
@@ -147,12 +137,29 @@ class General:
         # Settings: one numbered file per Set (Set #k <-> file -k.txt).
         # Lock detection happens at startup and on Connect only; the
         # lock handle must stay referenced or GC would release it
-        self.settingfolder = Path(tempfile.gettempdir())
+        self.settingfolder = data_directory()
         self.settinglist = ['Set #'+str(i+1) for i in range(12)]
         self.setting     = ttk.Combobox(self.frame, state = 'readonly')
         self.setting     .grid(row=1, column=1, padx=5, pady=8, sticky='e')
         self.setting     .config(width = 6, values = self.settinglist)
 
+        options = tk.Frame(self.frame)
+        options.grid(row=2, column=0, columnspan=2, sticky='ew', padx=3, pady=4)
+        tk.Label(options, text='Game Language').grid(row=0, column=0, sticky='w')
+        self.language = tk.StringVar(value='Japanese')
+        self.Language = ttk.Combobox(options, textvariable=self.language,
+                                    values=('Japanese', 'English'), state='readonly', width=12)
+        self.Language.grid(row=0, column=1, sticky='w')
+        self.Language.bind('<<ComboboxSelected>>', self.language_changed)
+        self.dryvar = tk.BooleanVar(value=True)
+        self.DryRun = tk.Checkbutton(options, text='Dry-run (操作なし)', variable=self.dryvar)
+        self.DryRun.grid(row=1, column=0, columnspan=2, sticky='w')
+        self.profilevar = tk.StringVar()
+        tk.Label(options, text='Profile JSON').grid(row=2, column=0, sticky='w')
+        self.ProfileEntry = tk.Entry(options, textvariable=self.profilevar, width=24)
+        self.ProfileEntry.grid(row=2, column=1, sticky='ew')
+        self.LanguageHook = None
+        self.RecvLockHook = None
         self.MigrateSetting()
         self.data = self.LoadSetting()
         # Startup lock detection: start on Set #1 and advance to the
@@ -171,10 +178,15 @@ class General:
                                   'nothing will be saved')
         elif self.lockedslot > 1:
             self.msgbox.MsgAppend(f'Using Set #{self.lockedslot}')
-            
+
     ############################################################################
     ################################ Functions #################################
     ############################################################################
+
+    def language_changed(self, event=None):
+        self.dryvar.set(True)
+        if self.LanguageHook is not None:
+            self.LanguageHook()
 
     def settingGetInd(self):
         return self.settinglist.index(self.setting.get())
@@ -188,6 +200,8 @@ class General:
         self.WriteSetting(self.data)
 
     def CounterPlusOne(self):
+        if hasattr(self, 'app') and threading.current_thread() is not threading.main_thread():
+            return self.app.call_ui(lambda: self.CounterPlusOne())
         # Update the counter and plus one; our slot is locked, so the
         # in-memory data is authoritative - no need to reload the files
         # A finished round: tell the recorder before the count moves on
@@ -201,21 +215,27 @@ class General:
         if str(self.ConnectButton['relief']) == 'sunken':
             self.Counter.Entry.config(state = 'disabled')
         self.WriteSetting(self.data)
-        
+
 
     def ConnectState(self, i):
+        if hasattr(self, 'app') and threading.current_thread() is not threading.main_thread():
+            return self.app.call_ui(lambda: self.ConnectState(i))
         # i =-1: recover the connect/reset button
         # i = 0: disable the connect/reset button, every thing recovered
         # i = 1: lock down everything
-        
+
         match i:
             case 0:
+                self.stop_event.set()
                 self.ConnectButton.config(relief = 'raised')
                 self.ConnectButton.config(state = 'disabled')
                 self.IPDS.Entry.config(state = 'normal')
                 self.IPPC.Entry.config(state = 'normal')
                 self.Counter.Entry.config(state = 'normal')
                 self.setting.config(state = 'readonly')
+                self.Language.config(state='readonly')
+                self.DryRun.config(state='normal')
+                self.ProfileEntry.config(state='normal')
                 # Write setting data struct
                 currset = self.settingGetInd()
                 self.GUI2data(currset)
@@ -227,7 +247,6 @@ class General:
                 # early failures (the TCP step) have nothing to close
                 if self.udp_socket is not None:
                     try:
-                        self.udp_socket.shutdown(socket.SHUT_RDWR)
                         self.udp_socket.close()
                     except OSError:
                         pass  # already closed by the GUI thread
@@ -241,6 +260,8 @@ class General:
                         pass
                     self.tcp_socket = None
             case 1:
+                if self.RecvLockHook is not None:
+                    self.RecvLockHook(True)
                 self.ConnectButton.config(relief = 'sunken')
                 self.ConnectButton.config(state = 'disabled')
                 self.ResetButton.config(state = 'disabled')
@@ -250,10 +271,15 @@ class General:
                 self.IPPC.Entry.config(state = 'disabled')
                 self.Counter.Entry.config(state = 'disabled')
                 self.setting.config(state = 'disabled')
+                self.Language.config(state='disabled')
+                self.DryRun.config(state='disabled')
+                self.ProfileEntry.config(state='disabled')
                 for j in range(len(self.TabButton)):
                     self.TabButton[j].config(state = 'disabled')
                     self.nb.tab(j+1, state='disabled')
             case -1:
+                if self.RecvLockHook is not None:
+                    self.RecvLockHook(False)
                 self.ResetButton.config(state = 'normal')
                 if self.RecordHook is not None:
                     self.RecordHook(False)
@@ -271,6 +297,8 @@ class General:
         self.ConnectButton.config(state = 'normal')
 
     def RecordLock(self, on):
+        if hasattr(self, 'app') and threading.current_thread() is not threading.main_thread():
+            return self.app.call_ui(lambda: self.RecordLock(on))
         # While the Record stream owns the port, only tab switching
         # is locked; everything else stays as it is
         state = 'disabled' if on else 'normal'
@@ -279,7 +307,7 @@ class General:
 
     def test3DS(self):
         # Test if 3DS is still alive
-        self.tcp_socket.send(
+        self.tcp_socket.sendall(
             bytearray.fromhex('7856341200000000000000000000\
                                0000050100000000000000000000\
                                0000000000000000000000000000\
@@ -293,6 +321,8 @@ class General:
         self.data[i].dsip    = self.IPDS.Entry.get()
         self.data[i].count   = int(self.Counter.Entry.get())
         self.data[i].currtab = int(self.Tab.get())
+        self.data[i].language = self.language.get()
+        self.data[i].profile = self.profilevar.get()
 
     def data2GUI(self, i):
         # For each tab, setting data struct to GUI
@@ -303,6 +333,9 @@ class General:
         self.Counter.Entry.delete(0,'end')
         self.Counter.Entry.insert(0,str(self.data[i].count))
         self.Tab.set(int(self.data[i].currtab))
+        self.language.set(self.data[i].language)
+        self.profilevar.set(self.data[i].profile)
+        self.language_changed()
 
     def DefaultData(self):
         # Fresh data struct: 12 default slots
@@ -324,6 +357,10 @@ class General:
                         slot.loto = [int(k) for k in temp[1].split(',')]
                     except ValueError:
                         slot.loto = []
+                case 'language':
+                    slot.language = temp[1] if temp[1] in ('English', 'Japanese') else 'Japanese'
+                case 'profile':
+                    slot.profile = line.split('=', 1)[1]
                 case 'recpath':
                     # split only on the first '=' so a folder name
                     # containing '=' survives the round trip
@@ -343,14 +380,14 @@ class General:
         for i in range(12):
             path = self.settingfolder / f'USUMShinyHunter-{i+1}.txt'
             if path.is_file():
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     self.ParseFields(f.read().split('\n'), data[i])
         return data
 
     def WriteSlotFile(self, i, d):
         # Write one Setting to its numbered file (i is 0-based)
         with open(self.settingfolder / f'USUMShinyHunter-{i+1}.txt',
-                  'w') as f:
+                  'w', encoding='utf-8') as f:
             f.write(f'pcip={d.pcip}\n')
             f.write(f'3dsip={d.dsip}\n')
             f.write(f'count={d.count}\n')
@@ -369,6 +406,8 @@ class General:
             f.write(f'debugshot={d.debugshot}\n')
             f.write(f'popform={d.popform}\n')
             f.write(f'pophalf={d.pophalf}\n')
+            f.write(f'language={d.language}\n')
+            f.write(f'profile={d.profile}\n')
 
     def WriteSetting(self, data):
         # Write the selected slot to its own file; the other slots
@@ -398,7 +437,7 @@ class General:
         # format (its first line is the numeric header)
         if not path.is_file():
             return False
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             return f.readline().strip().isdigit()
 
     def MigrateSetting(self):
@@ -435,6 +474,6 @@ class General:
                 path = self.settingfolder / f'USUMShinyHunter-{i+1}.txt'
                 if not path.is_file() or self.OldFormat(path):
                     self.WriteSlotFile(i, data[i])
-        
-        
-    
+
+
+

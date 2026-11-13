@@ -1,3 +1,103 @@
+# macOS Apple Silicon / 日本語版ギフト厳選（検証前プレビュー）
+
+[u93132/ShinyHunterUSUM](https://github.com/u93132/ShinyHunterUSUM) のforkです。
+改修元は `f49910affd7ed35b38af8e2b5b35499dcc554f0d`（v1.2.0）。
+日本語版USUMの **ベベノム、タイプ：ヌル（ポニ／エーテル）** の受け取り厳選に対応する構造を追加しています。
+
+**日本語版の実画像は未収集、3DS実機での映像・操作・色違い判定は未検証です。**
+現在そのまま使えるのはネイティブGUI、受信・画像収集、校正／再判定と安全停止の仕組みです。
+日本語テンプレートはプレースホルダで、実画像とルートごとの検証記録がないlive実行は拒否します。
+完全自動厳選の実機動作確認済みリリースではありません。
+
+## Macでのセットアップと起動
+
+Apple Siliconのarm64ターミナルで実行します。Rosetta、Wine、Windowsは不要です。
+Python標準ライブラリとTkinter、Pillowのみを使います。OpenCV／NumPyは追加していません。
+
+```sh
+brew install python@3.12 python-tk@3.12
+git clone --branch macos-japanese-gifts https://github.com/senuhi/ShinyHunterUSUM.git
+cd ShinyHunterUSUM
+/opt/homebrew/bin/python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m tkinter
+.venv/bin/python USUMShinyHunter_GUI.py
+```
+
+Tkのテストウィンドウを閉じてから本体を起動します。
+2回目からは `./run_macos.command`、またはFinderで同ファイルを開けます。
+Pythonとpython-tkのバージョンを揃えてください。
+Homebrew以外では、Tkを含む[python.orgのmacOS版](https://www.python.org/download/mac/tcltk/)も利用できます。
+[Homebrew python-tk@3.12](https://formulae.brew.sh/formula/python-tk@3.12) が対応依存です。
+署名済み `.app` の配布はこの改修に含みません。
+
+設定は `~/Library/Application Support/ShinyHunterUSUM/`、認識画像とスコアは
+`~/Pictures/ShinyHunterUSUM/` に保存します。作業ディレクトリによらず画像リソースを読み込みます。
+`USUM_DATA_DIR` と `USUM_CAPTURE_DIR` 環境変数で保存先を変更できます。
+設定スロットの排他はmacOSではfcntl、Windowsではmsvcrtを使います。
+
+## 3DS側と通信の準備
+
+1. Luma3DS導入済みの **New 3DS／New 2DS** と日本語版ウルトラサン／ウルトラムーンを用意します。
+   旧3DSは対象外です。上流はLuma3DS v13以降を前提としています。
+2. [NTR-HRの公式配布・説明](https://github.com/xzn/ntr-hr)に従って、New 3DS用のNTR-HRを導入し起動します。
+   本ツールは上流と同じ従来形式のJPEG/UDPストリームを使用します。新しいHR独自のFEC/KCP形式を
+   直接デコードする実装ではありません。従来互換ストリームが受信できる構成で使用してください。
+3. L+下+SELECTでRosalinaを開き、Miscellaneous options → Start InputRedirectionを有効にし、
+   3DSのIPを控えます。[Luma3DS Rosalina公式資料](https://github.com/LumaTeam/Luma3DS/wiki/Rosalina)も参照してください。
+4. Macと3DSを同一LANに接続します。Macは有線LAN、3DSは同じルーターのWi-Fiを推奨します。
+   APのクライアント分離を無効にし、macOSでローカルネットワーク／受信通信の許可が出たら許可します。
+5. GUIの **PC IP** にMacの実際のLAN IPv4と受信ポート（例 `192.168.1.10:8001`）、
+   **3DS IP** に3DSのIPv4（例 `192.168.1.50`）を入力します。初期の127.0.0.1は実機には使えません。
+   MacのWi-Fiアドレスは `ipconfig getifaddr en0` 等で確認できます。インターフェイス名は環境により異なります。
+6. ゲームの文字速度を「はやい」にし、対象を受け取る直前で保存します。手持ちに空きを作り、
+   同種の別個体を入れず、メニューは最初に「ポケモン」を開ける状態にします。
+
+Mac→3DSはNTR設定用TCP 8000、操作用UDP 4950、3DS→Macは映像用UDP 8001（変更可能）です。
+3DS IPには任意のNTR TCPポートも `IP:port` で指定できます。InputRedirectionの4950はLuma標準です。
+通信ライブラリの `LumaInputServer(host, port=4950)` はカスタムポートも尊重します。
+NTRへ接続する前に受信UDPをbindし、指定したMacのローカルIPからTCP接続します。
+NTRの映像ポートを変更した場合は3DSを再起動してください。他のNTRビューアとは同時に接続しません。
+
+## 画像校正と安全な使い方
+
+`Game Language` はJapanese／Englishを切り替えます。日本語版ではRecvの3ルートだけを選択できます。
+**dry-runは起動・設定スロット変更・言語変更のたびにONへ戻ります。**
+検証前はこれを維持してください。受信と認識だけを行い、ボタン入力もリセットも送信しません。
+
+日本語版の必須素材、座標・色しきい値の調整、PNG収集、オフライン再判定、
+検証記録の作成は [日本語版の校正手順](docs/CALIBRATION_JA.md) にまとめています。
+英語版の3ギフトも同じ安全制御を使い、上流テンプレートを流用しますが、save_file画像と実機検証が必要です。
+日本語・英語の保存先は `templates/ja/Recv` と `templates/en/Recv`、設定は `profiles/ja.json` と `profiles/en.json` です。
+カスタムJSONはGUIの **Profile JSON** にパスを指定できます（空欄なら標準プロファイル）。
+
+- ギフト厳選は受け取り直前から開始し、初回の無条件リセットを行いません。
+- 通常色／色違い／unknownを分け、対象名と新しい複数フレームの判定一致を要求します。
+- 判定不明、低信頼度、認識タイムアウト、画像停止、通信異常では安全停止します。
+- 通常色判定が有効な間だけ最終再確認をし、1回限りのリセットを許可します。
+- 認識画像・対象名のスコア・色距離・判定・停止理由をPNG／JSONLへ保存します。スコアは確率ではありません。
+- ギフトのBoostは無効です。自動保存はせず、色違い候補で停止して目視確認と手動保存を待ちます。
+
+英語版のBattle／Lotto／その他Recv／Recordの実装と元画像は残しています。
+新しい日本語対応と安全なギフト判定の対象は上記3ルートです。既存英語機能の実機回帰は未実施です。
+Recordは言語によらず受信できます。旧機能も既定dry-runでは自動操作を始めません。
+
+## 開発者向け検証
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+# GUIセッションがあるMacでだけ実行（模擬3DS映像を使います）
+.venv/bin/python tests/gui_smoke.py
+```
+
+[変更計画と事前調査](docs/IMPLEMENTATION_PLAN.md)、[検証結果と制限](docs/VALIDATION.md) を参照してください。
+CIはmacOS／Windows／Linuxのオフラインテストを定義しています。CIの成功は実機動作を保証しません。
+
+---
+
+以下は上流の英語READMEです。Windows版や元の英語版機能の説明であり、
+このforkの日本語対応の検証状態は上記を優先してください。
+
 # Shiny Hunter USUM (AFK)
 
 A Windows program that does the shiny hunting on Pokémon Ultra Sun / Ultra Moon
@@ -16,7 +116,7 @@ stable than it was.
 ## Demo
 
 One hunt round captured by the Record tab's AFK mode, framed in the New 3DS XL
-console picture (This is compressed to GIF for the purpose of demo and not to 
+console picture (This is compressed to GIF for the purpose of demo and not to
 flood your browser. You can have high quality recording using this app):
 [Original quality of this recording](https://github.com/u93132/ShinyHunterUSUM/blob/main/demo/AFK_1_1725.png)
 

@@ -1,0 +1,288 @@
+[
+  {
+    "file": "poipole-dialogue_name.png",
+    "target": "poipole",
+    "stage": "dialogue_name",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      105,
+      192,
+      165,
+      204
+    ]
+  },
+  {
+    "file": "poipole-party_added.png",
+    "target": "poipole",
+    "stage": "party_added",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      262,
+      193,
+      302,
+      207
+    ]
+  },
+  {
+    "file": "poipole-menu.png",
+    "target": "poipole",
+    "stage": "menu",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      27,
+      211,
+      38,
+      222
+    ]
+  },
+  {
+    "file": "poipole-party_level.png",
+    "target": "poipole",
+    "stage": "party_level",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      46,
+      56,
+      63,
+      66
+    ]
+  },
+  {
+    "file": "poipole-party_name.png",
+    "target": "poipole",
+    "stage": "party_name",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      46,
+      35,
+      68,
+      47
+    ]
+  },
+  {
+    "file": "poipole-restart_title.png",
+    "target": "poipole",
+    "stage": "restart_title",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      164,
+      184,
+      187,
+      195
+    ]
+  },
+  {
+    "file": "poipole-save_file.png",
+    "target": "poipole",
+    "stage": "save_file",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      30,
+      30,
+      150,
+      50
+    ]
+  },
+  {
+    "file": "typenull_poni-dialogue_name.png",
+    "target": "typenull_poni",
+    "stage": "dialogue_name",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      105,
+      192,
+      165,
+      204
+    ]
+  },
+  {
+    "file": "typenull_poni-dialogue_end.png",
+    "target": "typenull_poni",
+    "stage": "dialogue_end",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      227,
+      212,
+      241,
+      224
+    ]
+  },
+  {
+    "file": "typenull_poni-menu.png",
+    "target": "typenull_poni",
+    "stage": "menu",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      27,
+      211,
+      38,
+      222
+    ]
+  },
+  {
+    "file": "typenull_poni-party_level.png",
+    "target": "typenull_poni",
+    "stage": "party_level",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      46,
+      56,
+      63,
+      66
+    ]
+  },
+  {
+    "file": "typenull_poni-party_name.png",
+    "target": "typenull_poni",
+    "stage": "party_name",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      46,
+      35,
+      68,
+      47
+    ]
+  },
+  {
+    "file": "typenull_poni-restart_title.png",
+    "target": "typenull_poni",
+    "stage": "restart_title",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      164,
+      184,
+      187,
+      195
+    ]
+  },
+  {
+    "file": "typenull_poni-save_file.png",
+    "target": "typenull_poni",
+    "stage": "save_file",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      30,
+      30,
+      150,
+      50
+    ]
+  },
+  {
+    "file": "typenull_aether-dialogue_name.png",
+    "target": "typenull_aether",
+    "stage": "dialogue_name",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      105,
+      192,
+      165,
+      204
+    ]
+  },
+  {
+    "file": "typenull_aether-party_added.png",
+    "target": "typenull_aether",
+    "stage": "party_added",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      262,
+      193,
+      302,
+      207
+    ]
+  },
+  {
+    "file": "typenull_aether-dialogue_end.png",
+    "target": "typenull_aether",
+    "stage": "dialogue_end",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      101,
+      192,
+      115,
+      204
+    ]
+  },
+  {
+    "file": "typenull_aether-menu.png",
+    "target": "typenull_aether",
+    "stage": "menu",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      27,
+      211,
+      38,
+      222
+    ]
+  },
+  {
+    "file": "typenull_aether-party_level.png",
+    "target": "typenull_aether",
+    "stage": "party_level",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      46,
+      56,
+      63,
+      66
+    ]
+  },
+  {
+    "file": "typenull_aether-party_name.png",
+    "target": "typenull_aether",
+    "stage": "party_name",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 0,
+    "seed_box_UNVERIFIED": [
+      46,
+      35,
+      68,
+      47
+    ]
+  },
+  {
+    "file": "typenull_aether-restart_title.png",
+    "target": "typenull_aether",
+    "stage": "restart_title",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      164,
+      184,
+      187,
+      195
+    ]
+  },
+  {
+    "file": "typenull_aether-save_file.png",
+    "target": "typenull_aether",
+    "stage": "save_file",
+    "status": "MISSING_REAL_JAPANESE_CAPTURE",
+    "screen": 1,
+    "seed_box_UNVERIFIED": [
+      30,
+      30,
+      150,
+      50
+    ]
+  }
+]

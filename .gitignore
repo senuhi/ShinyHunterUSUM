@@ -172,3 +172,8 @@ tests/*_settings/
 tests/record_shots/
 tests/avi_test/
 
+# Operator calibration records and private real-console captures
+captures/
+profiles/*.validated.json
+*.local.json
+.DS_Store

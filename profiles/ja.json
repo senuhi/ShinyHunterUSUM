@@ -1,0 +1,479 @@
+{
+  "schema": 1,
+  "language": "Japanese",
+  "template_root": "../templates/ja/Recv",
+  "targets": {
+    "poipole": {
+      "calibration_status": "UNVERIFIED: Japanese coordinates are placeholders",
+      "stages": {
+        "dialogue_name": {
+          "box": [
+            105,
+            192,
+            165,
+            204
+          ],
+          "templates": [
+            "poipole-dialogue_name.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 200,
+          "interval": 0.15
+        },
+        "party_added": {
+          "box": [
+            262,
+            193,
+            302,
+            207
+          ],
+          "templates": [
+            "poipole-party_added.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "menu": {
+          "box": [
+            27,
+            211,
+            38,
+            222
+          ],
+          "templates": [
+            "poipole-menu.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "party_level": {
+          "box": [
+            46,
+            56,
+            63,
+            66
+          ],
+          "templates": [
+            "poipole-party_level.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "party_name": {
+          "box": [
+            46,
+            35,
+            68,
+            47
+          ],
+          "templates": [
+            "poipole-party_name.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 12,
+          "interval": 0.15,
+          "invert": true
+        },
+        "restart_title": {
+          "box": [
+            164,
+            184,
+            187,
+            195
+          ],
+          "templates": [
+            "poipole-restart_title.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "save_file": {
+          "box": [
+            30,
+            30,
+            150,
+            50
+          ],
+          "templates": [
+            "poipole-save_file.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 60,
+          "interval": 0.15
+        }
+      },
+      "approach": {
+        "x": 1.0,
+        "seconds": 0.1,
+        "repeats": 3
+      },
+      "load_seconds": 5,
+      "freshness": {
+        "max_age": 2.0,
+        "freeze_timeout": 15.0
+      },
+      "colour": {
+        "screen": 0,
+        "box": [
+          59,
+          184,
+          67,
+          192
+        ],
+        "normal": [
+          128.86,
+          242.03,
+          73.97
+        ],
+        "shiny": [
+          174.08,
+          126.38,
+          40.03
+        ],
+        "max_distance": 0.15,
+        "min_margin": 0.5,
+        "max_stddev": 80,
+        "samples": 3,
+        "sample_interval": 0.15
+      }
+    },
+    "typenull_poni": {
+      "calibration_status": "UNVERIFIED: Japanese coordinates are placeholders",
+      "stages": {
+        "dialogue_name": {
+          "box": [
+            105,
+            192,
+            165,
+            204
+          ],
+          "templates": [
+            "typenull_poni-dialogue_name.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 200,
+          "interval": 0.15
+        },
+        "dialogue_end": {
+          "box": [
+            227,
+            212,
+            241,
+            224
+          ],
+          "templates": [
+            "typenull_poni-dialogue_end.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "menu": {
+          "box": [
+            27,
+            211,
+            38,
+            222
+          ],
+          "templates": [
+            "typenull_poni-menu.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "party_level": {
+          "box": [
+            46,
+            56,
+            63,
+            66
+          ],
+          "templates": [
+            "typenull_poni-party_level.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "party_name": {
+          "box": [
+            46,
+            35,
+            68,
+            47
+          ],
+          "templates": [
+            "typenull_poni-party_name.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 12,
+          "interval": 0.15,
+          "invert": true
+        },
+        "restart_title": {
+          "box": [
+            164,
+            184,
+            187,
+            195
+          ],
+          "templates": [
+            "typenull_poni-restart_title.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "save_file": {
+          "box": [
+            30,
+            30,
+            150,
+            50
+          ],
+          "templates": [
+            "typenull_poni-save_file.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 60,
+          "interval": 0.15
+        }
+      },
+      "approach": {
+        "x": 1.0,
+        "seconds": 0.1,
+        "repeats": 3
+      },
+      "load_seconds": 5,
+      "freshness": {
+        "max_age": 2.0,
+        "freeze_timeout": 15.0
+      },
+      "colour": {
+        "screen": 0,
+        "box": [
+          59,
+          184,
+          67,
+          192
+        ],
+        "normal": [
+          128.86,
+          242.03,
+          73.97
+        ],
+        "shiny": [
+          174.08,
+          126.38,
+          40.03
+        ],
+        "max_distance": 0.15,
+        "min_margin": 0.5,
+        "max_stddev": 80,
+        "samples": 3,
+        "sample_interval": 0.15
+      }
+    },
+    "typenull_aether": {
+      "calibration_status": "UNVERIFIED: Japanese coordinates are placeholders",
+      "stages": {
+        "dialogue_name": {
+          "box": [
+            105,
+            192,
+            165,
+            204
+          ],
+          "templates": [
+            "typenull_aether-dialogue_name.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 200,
+          "interval": 0.15
+        },
+        "party_added": {
+          "box": [
+            262,
+            193,
+            302,
+            207
+          ],
+          "templates": [
+            "typenull_aether-party_added.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "dialogue_end": {
+          "box": [
+            101,
+            192,
+            115,
+            204
+          ],
+          "templates": [
+            "typenull_aether-dialogue_end.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "menu": {
+          "box": [
+            27,
+            211,
+            38,
+            222
+          ],
+          "templates": [
+            "typenull_aether-menu.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "party_level": {
+          "box": [
+            46,
+            56,
+            63,
+            66
+          ],
+          "templates": [
+            "typenull_aether-party_level.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "party_name": {
+          "box": [
+            46,
+            35,
+            68,
+            47
+          ],
+          "templates": [
+            "typenull_aether-party_name.png"
+          ],
+          "screen": 0,
+          "threshold": 0.12,
+          "vertical": 1,
+          "attempts": 12,
+          "interval": 0.15,
+          "invert": true
+        },
+        "restart_title": {
+          "box": [
+            164,
+            184,
+            187,
+            195
+          ],
+          "templates": [
+            "typenull_aether-restart_title.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 100,
+          "interval": 0.15
+        },
+        "save_file": {
+          "box": [
+            30,
+            30,
+            150,
+            50
+          ],
+          "templates": [
+            "typenull_aether-save_file.png"
+          ],
+          "screen": 1,
+          "threshold": 0.12,
+          "vertical": 0,
+          "attempts": 60,
+          "interval": 0.15
+        }
+      },
+      "approach": {
+        "x": 1.0,
+        "seconds": 0.1,
+        "repeats": 3
+      },
+      "load_seconds": 5,
+      "freshness": {
+        "max_age": 2.0,
+        "freeze_timeout": 15.0
+      },
+      "colour": {
+        "screen": 0,
+        "box": [
+          59,
+          184,
+          67,
+          192
+        ],
+        "normal": [
+          128.86,
+          242.03,
+          73.97
+        ],
+        "shiny": [
+          174.08,
+          126.38,
+          40.03
+        ],
+        "max_distance": 0.15,
+        "min_margin": 0.5,
+        "max_stddev": 80,
+        "samples": 3,
+        "sample_interval": 0.15
+      }
+    }
+  }
+}

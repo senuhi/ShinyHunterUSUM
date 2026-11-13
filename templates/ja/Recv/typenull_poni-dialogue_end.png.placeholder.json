@@ -1,0 +1,13 @@
+{
+  "file": "typenull_poni-dialogue_end.png",
+  "target": "typenull_poni",
+  "stage": "dialogue_end",
+  "status": "MISSING_REAL_JAPANESE_CAPTURE",
+  "screen": 1,
+  "seed_box_UNVERIFIED": [
+    227,
+    212,
+    241,
+    224
+  ]
+}

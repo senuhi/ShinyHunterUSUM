@@ -1,0 +1,13 @@
+{
+  "file": "typenull_aether-restart_title.png",
+  "target": "typenull_aether",
+  "stage": "restart_title",
+  "status": "MISSING_REAL_JAPANESE_CAPTURE",
+  "screen": 1,
+  "seed_box_UNVERIFIED": [
+    164,
+    184,
+    187,
+    195
+  ]
+}

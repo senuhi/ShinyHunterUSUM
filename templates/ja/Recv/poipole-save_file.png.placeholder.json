@@ -1,0 +1,13 @@
+{
+  "file": "poipole-save_file.png",
+  "target": "poipole",
+  "stage": "save_file",
+  "status": "MISSING_REAL_JAPANESE_CAPTURE",
+  "screen": 1,
+  "seed_box_UNVERIFIED": [
+    30,
+    30,
+    150,
+    50
+  ]
+}

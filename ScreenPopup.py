@@ -45,7 +45,8 @@ class ScreenPopup:
         self.win.withdraw()               # hidden while it is restyled
         self.win.resizable(False, False)
         self.win.title('Screen')
-        self.win.iconbitmap(bitmap=str(resource_path('image0/star.ico')))
+        from platform_support import set_window_icon
+        set_window_icon(self.win, resource_path('image0/star.ico'))
         # The popup is controlled only by the undock button; deny
         # taskbar / Alt+F4 closes so it can never be orphaned while
         # the app still thinks it is open

@@ -1,4 +1,5 @@
 import tkinter as tk
+import threading
 
 class ToolTip:
     # Hover hint for a widget: shows after a short delay, hides on
@@ -50,7 +51,7 @@ class InputBox:
 
         self.Label1=tk.Label(self.frame, text=self.Text1)
         self.Entry=tk.Entry(self.frame)
-        
+
         self.Label1.config(width=self.WidthList[0], anchor='w')
         self.Entry.config(width=self.WidthList[1])
 
@@ -63,6 +64,7 @@ class InputBox:
 
 class msgBox:
     def __init__(self, frame, w, h):
+        self.root = frame.winfo_toplevel()
         self.message = []
         self.scroll = tk.Scrollbar(frame, orient='vertical')
         self.msgbox = tk.Text(frame, width = w, height = h,
@@ -72,6 +74,9 @@ class msgBox:
         self.scroll.pack(pady=10, side='left', fill='y')
 
     def MsgAppend(self, s):
+        if threading.current_thread() is not threading.main_thread() and hasattr(self.root, 'post_ui'):
+            self.root.post_ui(lambda: self.MsgAppend(s))
+            return
         self.message.append(s)
         self.msgbox.insert(tk.END, s + '\n')
         # Keep only the last 500 lines

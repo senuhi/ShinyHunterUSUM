@@ -7,6 +7,8 @@ from PIL import Image
 from functions import (check, i2L, load_bitmaps, combine_images,
                        resource_path, write_avi, write_anim, flatten)
 from boxBase import ToolTip
+from ntr_transport import endpoint, open_stream, FrameAssembler
+from platform_support import capture_directory
 
 # Screen hole positions inside the N3DS console template: the holes
 # are exactly native resolution, so frames paste in 1:1
@@ -34,6 +36,7 @@ class Record:
         self.stop = threading.Event()
         self.stop.set()
         self.tcp_socket = None
+        self.TID = None
         self.hunterlock = False   # True from ConnectState(1) to (-1)
         self.runmode    = None    # None / 'burst' / 'video' / 'afk'
         self.auto_count = 0
@@ -80,10 +83,7 @@ class Record:
         ########################################################################
 
         # Save folder, next to the exe by default
-        if getattr(sys, 'frozen', False):
-            savedir = Path(sys.executable).parent
-        else:
-            savedir = Path('.').resolve()
+        savedir = capture_directory()
         self.framePath = tk.Frame(self.frame)
         self.framePath .grid(row=0, column=0, padx=3, pady=8, sticky='w')
         self.PathLabel = tk.Label(self.framePath, text='Save to: ',
@@ -169,6 +169,14 @@ class Record:
 
     def Connect(self):
         if self.stop.is_set():
+            if self.TID is not None and self.TID.is_alive():
+                self.msgbox.MsgAppend('Record is still connecting/stopping')
+                return
+            if getattr(self, 'TIDb', None) is not None and self.TIDb.is_alive():
+                self.msgbox.MsgAppend('Record is still stopping')
+                return
+            if self.app._connecting:
+                return
             if str(self.General.ConnectButton['relief']) == 'sunken':
                 self.msgbox.MsgAppend('Error: Disconnect the hunter '
                                       'before recording')
@@ -207,6 +215,11 @@ class Record:
         self.TVstate()
 
     def Disconnected(self):
+        if threading.current_thread() is not threading.main_thread():
+            return self.app.call_ui(self.Disconnected)
+        udp = getattr(self, 'udp_socket', None)
+        if udp is not None:
+            udp.close()
         self.StopRun()
         # Drop the TCP link to NTR as well: a lingering one blocks
         # the next connection attempt (ours or the hunter's)
@@ -222,118 +235,44 @@ class Record:
         self.General.RecordLock(False)
 
     def connect_procedure(self):
-        # Read the IPs straight from the General tab - no duplicates
         try:
-            IPstr = self.General.IPPC.Entry.get()
-            check(IPstr)
-            serverIP   = IPstr.split(':')[0]
-            serverport = int(IPstr.split(':')[1])
-            clientIP   = self.General.IPDS.Entry.get().split(':')[0]
-            check(clientIP)
-        except (Exception, IndexError):
-            self.msgbox.MsgAppend('Error: Invalid IP on the General tab')
-            return
-        self.stop.clear()
-        self.ConnectButton.config(image=self.bitmap['TVon'],
-                                  relief='sunken')
-        self.ConnTip.set_text('Stream is on')
-        self.msgbox.msgbox.config(bg = 'white')
-        # The stream owns the UDP port now: lock the hunting UI
-        self.General.RecordLock(True)
-        # Drop frames left from a previous run
-        self.image[0] = None
-        self.image[1] = None
-        # TCP/IP connection to NTR
-        self.msgbox.MsgAppend('Record: Build TCP/IP connection...')
-        try:
-            self.tcp_socket = socket.create_connection((clientIP, 8000))
-        except OSError:
-            self.msgbox.MsgAppend('Error: Cannot build connection')
+            local = endpoint(self.General.IPPC.Entry.get(), 8001)
+            console = endpoint(self.General.IPDS.Entry.get(), 8000)
+            self.stop.clear()
+            self.General.RecordLock(True)
+            self.image[:] = [None, None]
+            self.tcp_socket, self.udp_socket = open_stream(local, console[0], console[1])
+            self.ConnectButton.config(image=self.bitmap['TVon'], relief='sunken')
+            self.TIDb = threading.Thread(target=self.stream_thread,
+                                         args=(console[0],), daemon=True)
+            self.TIDb.start()
+            self.msgbox.MsgAppend('Record: Streaming (no controller input)')
+        except Exception as error:
             self.stop.set()
             self.Disconnected()
-            return
-        # Setup streaming by sending packets
-        self.msgbox.MsgAppend('Record: Set up streaming...')
-        for i in range(2):
-            self.tcp_socket.sendall(
-                bytearray.fromhex('7856341200000000000000000000\
-                                   0000050100000000000000000000\
-                                   0000000000000000000000000000\
-                                   0000000000000000000000000000\
-                                   0000000000000000000000000000\
-                                   0000000000000000000000000000') )
-            self.tcp_socket.sendall(
-                bytearray.fromhex('7856341200010000000000008503\
-                                   0000050100005000000000001800\
-                                   dce5af53411f0000000000000000\
-                                   0000000000000000000000000000\
-                                   0000000000000000000000000000\
-                                   0000000000000000000000000000'
-                                   .replace('411f', i2L(serverport))) )
-            time.sleep(0.1)
-        # Set up UDP socket on PC
-        self.msgbox.MsgAppend(f'Record: Listen on port {serverport}...')
-        try:
-            self.udp_socket = socket.socket(socket.AF_INET,
-                                            socket.SOCK_DGRAM)
-            self.udp_socket.bind((serverIP, serverport))
-        except OSError:
-            self.msgbox.MsgAppend('Error: Cannot bind the UDP port')
-            self.stop.set()
-            self.Disconnected()
-            return
-        self.TIDb = threading.Thread(target=self.stream_thread,
-                                     name='record-stream', daemon=True)
-        self.TIDb.start()
-        self.msgbox.MsgAppend('Record: Streaming, press Save')
+            self.msgbox.MsgAppend(f'Record: {error}')
 
-    def stream_thread(self):
-        # Fetch data from the UDP socket, share the app's image slots
-        # and display so the screen previews stay live
-        while True:
-            if self.stop.is_set():
-                # restore the placeholder previews, same behavior as
-                # the hunter's stream on disconnect
-                self.app.upperlabel.config(image=self.app.bitmap['Upper'])
-                self.app.lowerlabel.config(image=self.app.bitmap['Lower'])
-                try:
-                    self.udp_socket.close()
-                except OSError:
-                    pass
-                break
+    def stream_thread(self, console):
+        assembler = FrameAssembler()
+        udp = self.udp_socket
+        while not self.stop.is_set():
             try:
-                msg, addr = self.udp_socket.recvfrom(2048)
-                msg = bytearray(msg)
-            except OSError:
+                packet, address = udp.recvfrom(65535)
+                if address[0] != console:
+                    continue
+                result = assembler.feed(packet)
+                if result is not None:
+                    screen, image = result
+                    self.image[screen] = image
+            except socket.timeout:
                 continue
-            if len(msg) < 4:
-                continue
-            frame  = msg[0]
-            lastlu = msg[1]
-            index  = msg[3]
-            try:
-                if index == 0:
-                    self.frame_curr = frame
-                    self.index_prev = 0
-                    match lastlu:
-                        case 0 | 1:
-                            self.bytes[lastlu] = msg[4:]
-                else:
-                    if ( (frame == self.frame_curr) and
-                         (index == self.index_prev + 1) ):
-                        self.index_prev = index
-                        match lastlu:
-                            case 0 | 1:
-                                self.bytes[lastlu] += msg[4:]
-                            case 16 | 17:
-                                s = lastlu - 16
-                                self.bytes[s] += msg[4:]
-                                self.image[s] = (Image.open(
-                                    io.BytesIO(self.bytes[s]))
-                                    .rotate(90, expand=True))
-                                self.app.show_frame(s)
-            except Exception:
-                self.msgbox.MsgAppend('Error: Packet analyze error')
+            except OSError as error:
+                if not self.stop.is_set():
+                    self.msgbox.MsgAppend(f'Record stream stopped: {error}')
+                    self.stop.set()
+                    self.Disconnected()
+                return
+        udp.close()
 
     def ModeShow(self):
         # Reflect the current shot mode on the button icon

@@ -40,7 +40,7 @@ class TabBase:
     def check_stop(self):
         # The Connect button pops back up ('raised') on disconnect;
         # abort the hunt before sending any further input
-        if str(self.General.ConnectButton['relief']) == 'raised':
+        if self.General.stop_event.is_set() or str(self.General.ConnectButton['relief']) == 'raised':
             raise HuntStopped
 
     def cpad(self, x, y):
@@ -150,27 +150,27 @@ class TabBase:
             ' - 3DS connection lost')
 
     def main_procedure(self):
-        # Game soft reset and re-enter
-        gametype = self.restart_game()
-        gamestr = self.gamestr[gametype-1]
-        self.msgbox.MsgAppend(
-            f'Pokemon {gamestr} detected')
-        # Drive the tab's hunt()
+        if self.General.dry_run or self.General.language.get() != 'English':
+            self.msgbox.MsgAppend('Dry-run: legacy English hunt disabled; use Record or a gift target.')
+            self.General.ConnectState(0)
+            self.General.ConnectState(-1)
+            return
         try:
+            gametype = self.restart_game()
+            if gametype not in (1, 2):
+                raise HuntStopped('Game version recognition failed')
+            self.msgbox.MsgAppend(f'Pokemon {self.gamestr[gametype-1]} detected')
             self.hunt(gametype)
         except HuntStopped:
-            # User pressed disconnect: finish the handover and unlock
+            self.General.ConnectState(0)
             self.General.ConnectState(-1)
+        except Exception as error:
+            self.msgbox.MsgAppend(f'SAFE STOP: {error}')
+            self.give_up()
+        finally:
             try:
+                self.ir.clear_everything()
+                self.ir.send(print_sent=False)
                 self.ir.return_control()
             except OSError:
-                pass   # dead socket: 3DS side already has control
-        except OSError:
-            # The input socket died (network drop / IP change):
-            # stop with the red screen
-            self.give_up()
-        except Exception:
-            # Whatever just happened, never leave the GUI locked;
-            # re-raise so the traceback still shows in debug builds
-            self.give_up()
-            raise
+                pass

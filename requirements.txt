@@ -1,2 +1,3 @@
-# Python 3.10+ (tkinter ships with the Windows installer)
-Pillow>=9.1
+# Python 3.10+; macOS additionally needs the matching python-tk formula.
+# Runtime uses only Python stdlib, Tkinter and Pillow; no Rosetta/Win32 bindings.
+Pillow>=10.4,<14
