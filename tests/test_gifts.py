@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from PIL import Image, ImageDraw
 from gift_recognition import Profile, SafetyStop, colour_verdict, template_score, TARGETS
-from gift_hunt import GiftRunner, run_gift
+from gift_hunt import Evidence, GiftRunner, run_gift
 from ntr_transport import Frame
 from tppflush import HIDButtons
 from platform_support import lock_slot
@@ -118,6 +118,15 @@ class ProfileTests(unittest.TestCase):
         for key,value in [('max_distance',float('nan')),('min_margin',0),('max_distance',2),('normal',config['shiny'])]:
             bad=copy.deepcopy(config);bad[key]=value
             with self.subTest(key=key),self.assertRaises(SafetyStop):colour_verdict(screen_for(profile),bad)
+
+    def test_evidence_directories_unique_with_identical_clock(self):
+        with tempfile.TemporaryDirectory() as td:
+            profile=fixture(Path(td))
+            with patch('gift_hunt.datetime') as clock:
+                clock.now.return_value.strftime.return_value='SAME-TIMESTAMP-'
+                first=Evidence(td,profile);second=Evidence(td,profile)
+            self.assertNotEqual(first.directory,second.directory)
+            first.record('test');second.record('test')
 
     def test_platform_lock_is_exclusive_and_released(self):
         with tempfile.TemporaryDirectory() as td:

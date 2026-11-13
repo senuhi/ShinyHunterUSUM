@@ -1,6 +1,7 @@
 """Gift-only controller. Reset is reachable only after fresh NORMAL consensus."""
 import json
 import time
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from gift_recognition import Profile, TARGETS, SafetyStop, colour_verdict
@@ -9,8 +10,10 @@ from tppflush import HIDButtons, CPAD_Commands
 
 class Evidence:
     def __init__(self, directory, profile):
-        self.directory = Path(directory) / ('gift-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
-        self.directory.mkdir(parents=True)
+        parent = Path(directory)
+        parent.mkdir(parents=True, exist_ok=True)
+        self.directory = Path(tempfile.mkdtemp(
+            prefix='gift-' + datetime.now().strftime('%Y%m%d-%H%M%S-'), dir=parent))
         self.profile = profile
         self.index = 0
 

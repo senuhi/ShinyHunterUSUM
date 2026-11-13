@@ -14,7 +14,7 @@ Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
 | Check | Result and scope |
 | --- | --- |
-| `python -m unittest discover -s tests -v` | 26 tests passed |
+| `python -m unittest discover -s tests -v` | 27 tests passed |
 | `python tests/gui_smoke.py` | Native window creation, Japanese-only target controls, English switching, UTF-8 settings round trip, synthetic JPEG UDP → English passive recognition, zero controller packets, floating popup, clean worker/UI shutdown |
 | Compile/import checks | Modified Python modules compile; GUI module can be imported without creating a Tk window |
 | Transport | Actual loopback TCP setup bytes and UDP bind, actual 20-byte Luma input and return-control packets at a custom port |
@@ -55,3 +55,11 @@ Capture defaults move to the user's Pictures/ShinyHunterUSUM directory.
 Follow [CALIBRATION_JA.md](CALIBRATION_JA.md) for each target separately. Supply real Japanese assets,
 independent normal/shiny/unknown fixtures and positive/negative fixtures for every navigation stage,
 confirm the hardware checklist, then explicitly attest the evidence. No validation receipt is shipped.
+
+## Cross-platform follow-up
+
+The first GitHub Actions run found that Windows can return the same timestamp
+for successive evidence sessions. Evidence directories now use an atomic,
+randomized `mkdtemp` suffix; a fixed-clock collision regression is included.
+The unavailable `macos-14` hosted-runner configuration was replaced by
+`macos-latest`. Refer to the current commit's Actions run for CI results.
