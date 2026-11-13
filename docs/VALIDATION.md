@@ -227,3 +227,22 @@ for successive evidence sessions. Evidence directories now use an atomic,
 randomized `mkdtemp` suffix; a fixed-clock collision regression is included.
 The unavailable `macos-14` hosted-runner configuration was replaced by
 `macos-latest`. Refer to the current commit's Actions run for CI results.
+
+## Native delivery-rehearsal GUI (2026-11-14)
+
+The new Recv test window records screenshots and intended keys while the operator
+performs all recording inputs on the console. Default playback is passive, with
+manual acknowledgements. Live replay requires a completed passive cycle, a
+pre-receipt-save declaration and explicit in-app approval; it is capped at three
+cycles. A received-screen reset checkpoint must differ from the initial field.
+Three new complete frames must match the recorded ROI per step, with a final
+pre-send recheck. Unknown, stale, frozen or broken video stops without retries.
+The window saves private PNGs, scores, trace and report, and cannot save the game.
+It does not classify shininess or unlock gift-hunt calibration gates.
+
+59 unit/loopback tests pass, including passive zero-input, authorization gates,
+three synthetic live cycles, unknown/stale rejection and received-screen checks.
+Native Tk window creation/defaults and 968x855 layout on a 1512x982 Mac display
+were checked with no console connection. The new GUI's delivery recording,
+physical playback and three-cycle stability have NOT been verified on hardware.
+Earlier command-line reset tests do not imply this GUI is hardware-validated.

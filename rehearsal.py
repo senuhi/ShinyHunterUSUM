@@ -1,0 +1,296 @@
+"""Screen-checked delivery rehearsal. This is NOT a shiny-hunt classifier.
+
+Recording and default playback are passive. A live session needs explicit GUI
+approval, a pre-receipt save, one reviewed received-screen reset checkpoint,
+and a bounded cycle budget. No save, touch or unrecognized-state input exists.
+"""
+import json
+import shutil
+import socket
+import tempfile
+import threading
+import time
+from pathlib import Path
+from PIL import Image, ImageChops, ImageStat
+from gift_recognition import SafetyStop, roi
+from ntr_transport import FrameStore
+from tppflush import HIDButtons, LumaInputServer
+from video_stream import open_video
+
+BUTTONS = ('A', 'B', 'X', 'DPADUP', 'DPADDOWN', 'DPADLEFT', 'DPADRIGHT', 'START', 'RESET')
+DEFAULT_BOXES = {0: [0, 0, 320, 240], 1: [0, 0, 400, 240]}
+
+
+def image_score(image, reference, box):
+    a, b = roi(image, box).convert('RGB'), roi(reference, box).convert('RGB')
+    if ImageStat.Stat(b.convert('L')).stddev[0] < 5:
+        raise SafetyStop('目印が単色です。文字やアイコンを含む範囲を選択してください。')
+    return sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / (3 * 255)
+
+
+def validate_trace(trace, directory):
+    directory = Path(directory).resolve()
+    if trace.get('schema') != 1 or trace.get('kind') != 'delivery_rehearsal':
+        raise SafetyStop('受取テストの記録ファイルではありません。')
+    steps = trace.get('steps', [])
+    if not 2 <= len(steps) <= 80 or sum(s.get('button') == 'RESET' for s in steps) != 1:
+        raise SafetyStop('手順は2〜80操作、リセットは1周に1回にしてください。')
+    reset_index = next(i for i, s in enumerate(steps) if s.get('button') == 'RESET')
+    if reset_index == 0 or not steps[reset_index].get('received_confirmed'):
+        raise SafetyStop('受取済み画面を確認したリセット地点が必要です。')
+    if 'A' not in [s.get('button') for s in steps[:reset_index]]:
+        raise SafetyStop('リセット前の受け取り操作がありません。')
+    if trace.get('backend') not in ('ChirunoMod', 'NTR-HR'):
+        raise SafetyStop('映像方式が不明です。')
+    if trace.get('quality') != 50:
+        raise SafetyStop('受取テストの記録画質が異なります。')
+    for step in steps + [trace.get('finish', {})]:
+        if step in steps and step.get('button') not in BUTTONS:
+            raise SafetyStop('許可されていない操作です。')
+        refs, boxes = step.get('references', {}), step.get('boxes', {})
+        if not boxes or set(boxes) - {'0', '1'} or not set(boxes) <= set(refs) or set(refs) != {'0', '1'}:
+            raise SafetyStop('画面の照合範囲が不正です。')
+        for key, filename in refs.items():
+            path = (directory / filename).resolve()
+            if not path.is_relative_to(directory):
+                raise SafetyStop('参照画像が記録フォルダの外にあります。')
+            with Image.open(path) as image:
+                if image.size != ((320, 240) if key == '0' else (400, 240)):
+                    raise SafetyStop('参照画像の画面サイズが違います。')
+                if key in boxes:image_score(image, image, boxes[key])
+    reset_step = steps[reset_index]
+    different = False
+    for key, box in reset_step['boxes'].items():
+        with Image.open(directory/reset_step['references'][key]) as received, Image.open(directory/steps[0]['references'][key]) as initial:
+            difference=ImageChops.difference(roi(received,box).convert('RGB'),roi(initial,box).convert('RGB'))
+            different |= sum(ImageStat.Stat(difference).mean)/(3*255) > .07
+    if not different:
+        raise SafetyStop('リセット地点が開始画面と似ています。受取済みと分かる名前・情報画面を記録してください。')
+    return trace
+
+
+class Rehearsal:
+    def __init__(self, backend, local, console, input_port, output, notify=lambda *args: None):
+        self.backend, self.local, self.console = backend, local, console
+        self.input_port = input_port
+        self.output = Path(output); self.output.mkdir(parents=True, exist_ok=True)
+        self.directory = Path(tempfile.mkdtemp(prefix='delivery-', dir=self.output))
+        self.notify = notify
+        self.stop = threading.Event(); self.manual_next = threading.Event()
+        self.store = FrameStore(); self.source = None; self.reader = None; self.player = None
+        self.lock = threading.Lock(); self.log_lock = threading.Lock()
+        self.latest = {}; self.counts = {0: 0, 1: 0}; self.started = time.monotonic()
+        self.trace = dict(schema=1, kind='delivery_rehearsal', backend=backend, quality=50,
+                          shiny_classification=False, steps=[])
+        self.trace_directory = self.directory
+        self.passive_verified = False
+        self.report = dict(status='受信準備中', controller_packets=0, reset_attempts=0,
+                           completed_cycles=0, live=False, shiny_verified=False)
+
+    @property
+    def playing(self):
+        return self.player is not None and self.player.is_alive()
+
+    @property
+    def busy(self):
+        return self.playing or (self.reader is not None and self.reader.is_alive())
+
+    def event(self, kind, **details):
+        with self.log_lock:
+            with (self.directory/'events.jsonl').open('a', encoding='utf-8') as f:
+                f.write(json.dumps(dict(event=kind, elapsed=time.monotonic()-self.started,
+                                        **details), ensure_ascii=False)+'\n')
+
+    def status(self, text):
+        self.report['status'] = text; self.notify('status', text)
+        self.write_report()
+
+    def write_report(self):
+        with self.log_lock:
+            (self.directory/'report.json').write_text(json.dumps(dict(self.report,
+                frames={str(k): v for k, v in self.counts.items()},
+                elapsed=time.monotonic()-self.started), ensure_ascii=False, indent=2)+'\n')
+
+    def fail(self, error):
+        with self.lock:
+            for screen, image in self.latest.items():
+                image.save(self.directory/f'safe-stop-{screen}.png')
+        self.event('safe_stop', error=str(error)); self.stop.set()
+        self.status('安全停止: '+str(error))
+
+    def connect(self):
+        self.reader = threading.Thread(target=self._receive, daemon=True)
+        self.reader.start()
+
+    def _receive(self):
+        try:
+            self.source = open_video(self.backend, self.local, self.console, quality=50)
+            self.status('受信中。記録と照合のみでは入力しません。')
+            while not self.stop.is_set():
+                try: frame = self.source.read()
+                except socket.timeout:
+                    if min(self.counts.values()):self.healthy()
+                    elif time.monotonic()-self.started>15:raise SafetyStop('15秒以内に両画面を受信できませんでした。')
+                    continue
+                self.store.put(frame.screen, frame.image, frame.started, frame.completed)
+                with self.lock:
+                    self.latest[frame.screen] = frame.image
+                    self.counts[frame.screen] += 1
+                self.event('frame', screen=frame.screen, count=self.counts[frame.screen],
+                           span=frame.completed-frame.started)
+        except Exception as error:
+            if not self.stop.is_set(): self.fail(error)
+        finally:
+            if self.source is not None: self.source.close()
+            self.write_report()
+
+    def healthy(self):
+        if self.stop.is_set(): raise SafetyStop('受信が停止しています。再接続してください。')
+        return {str(s): self.store.snapshot(s, max_age=2, max_span=2, freeze_timeout=15)
+                for s in (0, 1)}
+
+    def capture(self, name, boxes):
+        frames = self.healthy(); references = {}
+        for key, box in boxes.items():
+            image_score(frames[key].image, frames[key].image, box)
+        for key in ('0','1'):
+            filename = name+'-'+key+'.png'; frames[key].image.save(self.directory/filename)
+            references[key] = filename
+        return dict(boxes=boxes, references=references)
+
+    def record(self, button, boxes, received_confirmed=False):
+        if self.playing: raise SafetyStop('再生中は記録できません。')
+        if button not in BUTTONS: raise SafetyStop('未対応の操作です。')
+        if len(self.trace['steps']) >= 80: raise SafetyStop('記録は80操作までです。')
+        if button == 'RESET':
+            if not received_confirmed: raise SafetyStop('受取済みの画面を確認してチェックしてください。')
+            if any(s['button']=='RESET' for s in self.trace['steps']):
+                raise SafetyStop('1周にリセットは1回だけ記録できます。')
+        step = dict(button=button, received_confirmed=bool(received_confirmed),
+                    **self.capture(f'step-{len(self.trace["steps"])+1:02d}', boxes))
+        self.trace['steps'].append(step)
+        self.trace.pop('finish', None)
+        self.passive_verified = False
+        self.save_draft()
+        self.event('recorded_passively', button=button, controller_packets=0)
+        self.status(f'{button}を記録しました。3DS本体でその操作を1回行ってください。')
+
+    def finish_recording(self, boxes):
+        self.passive_verified = False
+        self.trace['finish'] = self.capture('finish', boxes)
+        validate_trace(self.trace, self.directory)
+        path = self.directory/'trace.json'
+        path.write_text(json.dumps(self.trace, ensure_ascii=False, indent=2)+'\n')
+        self.trace_directory = self.directory
+        self.status('記録完了。照合のみ、または許可して再生を選べます。')
+        return path
+
+    def save_draft(self):
+        (self.directory/'trace-draft.json').write_text(json.dumps(self.trace,ensure_ascii=False,indent=2)+'\n')
+
+    def load(self, path):
+        if self.playing: raise SafetyStop('再生中は読み込めません。')
+        path = Path(path).resolve(); trace = validate_trace(json.loads(path.read_text()), path.parent)
+        if trace['backend'] != self.backend: raise SafetyStop('記録と現在の映像方式が違います。')
+        for index, step in enumerate(trace['steps']+[trace['finish']]):
+            for key, filename in list(step['references'].items()):
+                copied=f'loaded-{index:02d}-{key}.png'
+                source=(path.parent/filename).resolve(); destination=self.directory/copied
+                if source != destination:shutil.copyfile(source,destination)
+                step['references'][key]=copied
+        self.trace, self.trace_directory = trace, self.directory
+        self.passive_verified = False
+        self.save_draft()
+        self.status('記録を読み込みました。開始画面へ戻して再生してください。')
+
+    def _wait_match(self, step, since, timeout=25):
+        references = {key: Image.open(self.trace_directory/name).convert('RGB')
+                      for key, name in step['references'].items()}
+        end = time.monotonic()+timeout; serials = {}; consensus = 0
+        while time.monotonic() < end:
+            frames = self.healthy()
+            keys = step['boxes']
+            if not all(frames[k].serial > serials.get(k, 0) and
+                       frames[k].started is not None and frames[k].started >= since for k in keys):
+                self.stop.wait(.03); continue
+            serials = {k: frames[k].serial for k in keys}
+            scores = {k: image_score(frames[k].image, references[k], step['boxes'][k]) for k in keys}
+            matched = all(value <= .035 for value in scores.values())
+            self.event('recognition', scores=scores, matched=matched, serials=serials)
+            self.notify('scores', scores)
+            consensus = consensus+1 if matched else 0
+            if consensus >= 3:
+                for k, frame in frames.items():
+                    frame.image.save(self.directory/f'checkpoint-{self.report.get("cycle", 0)}-{self.report.get("step", 0)}-{k}.png')
+                return
+            self.stop.wait(.03)
+        raise SafetyStop('記録した次の画面を認識できません。追加入力・リセットは送りません。')
+
+    def _send(self, name, controller, step):
+        current=self.healthy()
+        for key, box in step['boxes'].items():
+            with Image.open(self.trace_directory/step['references'][key]) as reference:
+                if image_score(current[key].image,reference,box) > .035:
+                    raise SafetyStop('送信直前に画面が変わりました。入力しません。')
+        buttons = (HIDButtons.L, HIDButtons.R, HIDButtons.SELECT) if name=='RESET' else (getattr(HIDButtons, name),)
+        for button in buttons: controller.press(button)
+        if name=='RESET': self.report['reset_attempts'] += 1
+        self.event('input_attempt', button=name)
+        try:
+            controller.send(print_sent=False); self.report['controller_packets'] += 1
+            self.stop.wait(.15 if name=='RESET' else .08)
+        finally:
+            try:
+                controller.clear_everything(); controller.send(print_sent=False)
+                self.report['controller_packets'] += 1
+            finally:
+                controller.return_control(); self.report['controller_packets'] += 1
+        self.event('input_completed', button=name)
+
+    def play(self, cycles=1, live=False, saved=False, approved=False):
+        if self.playing: raise SafetyStop('すでに再生中です。')
+        if type(cycles) is not int or not 1 <= cycles <= 3: raise SafetyStop('試験は1〜3周です。')
+        validate_trace(self.trace, self.trace_directory)
+        if live and (not saved or not approved): raise SafetyStop('受取前セーブと今回の実行許可が必要です。')
+        if live and not self.passive_verified: raise SafetyStop('まず「照合のみ」で1周を完了してください。')
+        self.healthy()
+        self.report.update(live=live, cycle=0, step=0, completed_cycles=0)
+        self.player = threading.Thread(target=self._play, args=(cycles, live), daemon=True)
+        self.player.start()
+
+    def _play(self, cycles, live):
+        controller = None; since = time.monotonic()
+        try:
+            if live: controller = LumaInputServer(self.console[0], self.input_port)
+            for cycle in range(1, cycles+1):
+                self.report['cycle'] = cycle
+                for index, step in enumerate(self.trace['steps'], 1):
+                    self.report['step'] = index
+                    self.manual_next.clear()
+                    self.status(f'{cycle}/{cycles}周 · {index}/{len(self.trace["steps"])}操作 · {step["button"]}の前画面を照合中')
+                    self._wait_match(step, since)
+                    if live:
+                        self._send(step['button'], controller, step)
+                    else:
+                        self.status(f'一致: 3DSで{step["button"]}を操作して「手動操作済み」を押してください。送信0。')
+                        self.notify('manual_ready', True)
+                        while not self.manual_next.wait(.05): self.healthy()
+                        self.healthy(); self.notify('manual_ready', False)
+                    since = time.monotonic()
+                self.status(f'{cycle}/{cycles}周 · 最後の復帰画面を照合中')
+                self.report['step'] = 'finish'
+                self._wait_match(self.trace['finish'], since)
+                self.report['completed_cycles'] += 1
+            self.status(f'{cycles}周の受取テスト完了。色違い判定の検証は含みません。')
+            if not live:self.passive_verified = True
+        except Exception as error:
+            self.fail(error)
+        finally:
+            if controller is not None: controller.socket.close()
+            self.notify('manual_ready', False); self.notify('play_finished', None)
+            self.write_report()
+
+    def disconnect(self):
+        self.stop.set(); self.manual_next.set()
+        if self.source is not None: self.source.close()
+        self.status('停止しました。送信済み操作の自動再試行はしません。')

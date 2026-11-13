@@ -170,6 +170,10 @@ class Record:
             self.PathEntry.insert(0, folder)
 
     def Connect(self):
+        diagnostics = getattr(self.app, 'Diagnostics', None)
+        if diagnostics is not None and diagnostics.busy:
+            self.msgbox.MsgAppend('実機テストの受信を先に停止してください。')
+            return
         if self.stop.is_set():
             if self.TID is not None and self.TID.is_alive():
                 self.msgbox.MsgAppend('Record is still connecting/stopping')

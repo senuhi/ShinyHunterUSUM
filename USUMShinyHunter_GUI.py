@@ -22,7 +22,7 @@ from Lotto   import *
 from Record  import *
 from ScreenPopup import ScreenPopup
 
-VERSION = '1.3.0-macos-ja-preview'
+VERSION = '1.3.1-macos-ja-preview'
 
 # Define the application class
 class ShinyHunterUSUM(tk.Tk):
@@ -158,6 +158,9 @@ class ShinyHunterUSUM(tk.Tk):
         self.Lotto  = Lotto (self.nb, self.General, self.msgbox, self.image)
         self.Recv   = Recv  (self.nb, self.General, self.msgbox, self.image)
         self.Battle = Battle(self.nb, self.General, self.msgbox, self.image)
+        self.Diagnostics = None
+        tk.Button(self.Recv.frame, text='実機テスト（受取・リセット）',
+                  command=self.OpenDiagnostics).grid(row=3, column=0, columnspan=3, sticky='ew', padx=3, pady=6)
         self.General.LanguageHook = self.Recv.language_switch
         self.General.RecvLockHook = self.Recv.set_locked
         # Record page: independent of the hunting-mode machinery, so
@@ -189,6 +192,13 @@ class ShinyHunterUSUM(tk.Tk):
 
     def post_ui(self, callback):
         self.ui_queue.put(callback)
+
+    def OpenDiagnostics(self):
+        if self.Diagnostics is not None and self.Diagnostics.winfo_exists():
+            self.Diagnostics.lift()
+            return
+        from rehearsal_gui import RehearsalWindow
+        self.Diagnostics = RehearsalWindow(self)
 
     def call_ui(self, callback):
         if threading.current_thread() is threading.main_thread():
@@ -230,6 +240,8 @@ class ShinyHunterUSUM(tk.Tk):
 
     def on_closing(self):
         self.closing = True
+        if self.Diagnostics is not None:
+            self.Diagnostics.close()
         self.General.stop_event.set()
         self.Record.stop.set()
         self.ClosePopup()
@@ -345,6 +357,9 @@ class ShinyHunterUSUM(tk.Tk):
             label.config(image = self.bitmap[name])
 
     def Connect3DS(self):
+        if self.Diagnostics is not None and self.Diagnostics.busy:
+            self.msgbox.MsgAppend('実機テストの受信を先に停止してください。')
+            return
         if self._connecting:
             return
         if str(self.General.ConnectButton['relief']) != 'raised':
@@ -479,4 +494,6 @@ class ShinyHunterUSUM(tk.Tk):
 
 if __name__ == '__main__':
     app = ShinyHunterUSUM()
+    if '--hardware-test' in sys.argv[1:]:
+        app.OpenDiagnostics()
     app.mainloop()
