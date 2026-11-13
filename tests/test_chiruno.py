@@ -75,6 +75,34 @@ class ChirunoTests(unittest.TestCase):
                 self.assertLess(abs(pixel[0]-(50+20*i)),3)
             self.assertLess(frame.started,frame.completed)
 
+    def test_coalesced_packets_keep_independent_first_byte_times(self):
+        parser=PacketParser();raw=packet(255,payload=b'hello')
+        self.assertEqual(parser.feed_timed(raw[:3],10),[])
+        results=parser.feed_timed(raw[3:]+raw+raw[:4],11)
+        self.assertEqual([started for _,started in results],[10,11])
+        self.assertEqual(parser.started,11)
+        results=parser.feed_timed(raw[4:],12)
+        self.assertEqual([started for _,started in results],[11])
+        self.assertIsNone(parser.started)
+
+    def test_source_coalescing_does_not_age_later_frames_from_first_packet(self):
+        clock=[10.0];raw=wire_message(image_message(1))
+        source=ChirunoSource.__new__(ChirunoSource)
+        source.parser=PacketParser();source.decoder=ChirunoDecoder(clock=lambda:clock[0])
+        source.ready=[];source.partial_since=None;source.read_limit=2
+        chunks=iter([raw[:4]]+[raw[4:]+raw[:4]]*15)
+        def receive(size):
+            clock[0]+=.2
+            return next(chunks)
+        source.tcp=Mock();source.tcp.recv.side_effect=receive
+        frames=[]
+        with patch('chiruno_transport.time.monotonic',side_effect=lambda:clock[0]):
+            while len(frames)<15:
+                try:frames.append(source.read())
+                except socket.timeout:pass
+        self.assertGreater(frames[-1].started-frames[0].started,2)
+        self.assertTrue(all(f.completed-f.started<.21 for f in frames))
+
     def test_full_frame_padded_width_rotation_and_red_blue(self):
         frame=ChirunoDecoder().feed(image_message(1,colour=(220,50,10),padded=True))
         self.assertEqual(frame.image.size,(400,240))

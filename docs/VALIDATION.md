@@ -3,6 +3,27 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: stage 2 approved 11-key sequence — observed, with safety stops
+
+On 2026-11-14 the approved direction sequence (right, left, down, up twice),
+A, B, B was sent exactly once per key: 11 presses / 33 UDP datagrams.
+Received images show expected cursor moves, the party screen, return to the
+normal menu and finally a stable Rotom map. Final receive-only confirmation:
+3.075 s, 6 upper / 5 lower complete passes. No save or reset was sent.
+
+The sequence was split by safety stops after keys 7 (cursor confidence margin)
+and 9 (stale screen), with images/fresh reception reviewed before continuing
+only the remaining keys. It was not an uninterrupted endurance pass. The final
+B's immediate checkpoint was transitional; the separate passive check confirmed
+the stable field. No stage-2 operator confirmation or live attestation was created.
+Private evidence index: ignored `captures/stage2-summary-20261114.json`.
+
+Fixed a separate TCP timestamp bug: coalesced reads could inherit an earlier
+packet's start indefinitely. Each packet now retains its own first-byte time.
+Two regressions cover fragmented/coalesced provenance and source freshness over
+many successive packets; all 45 unit/loopback tests pass. Freshness limits remain
+unchanged. Real latency stops also occurred after the fix and remain unresolved.
+
 ## Latest: stage 1 one-B input — operator-confirmed success
 
 After a packet-generation dry-run, the operator manually opened the normal menu
@@ -19,7 +40,7 @@ and B-up sends was about 0.084 s; no claim is made about exact console schedulin
 
 This confirms only one real B response with concurrent video, not repeated-key
 stability, reset recovery, gift navigation or shiny accuracy. No live attestation
-was created. Stage 2 has a dry-run plan and is pending separate operator approval.
+was created at stage 1. Stage 2 results are recorded above.
 See [AUTOMATION_STAGES_JA.md](AUTOMATION_STAGES_JA.md). Private evidence remains
 in ignored `captures/stage1-b-live-20261113/`.
 

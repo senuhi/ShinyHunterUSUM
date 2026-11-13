@@ -35,8 +35,15 @@ class PacketParser:
     """Incremental parser: TCP recv boundaries and timeouts are not packet boundaries."""
     def __init__(self):
         self.buffer = bytearray()
+        self.started = None
 
     def feed(self, data):
+        return [message for message, _ in self.feed_timed(data, time.monotonic())]
+
+    def feed_timed(self, data, received):
+        """Keep the first-byte time of each packet across coalesced TCP reads."""
+        if not self.buffer and data:
+            self.started = received
         self.buffer.extend(data)
         packets = []
         while len(self.buffer) >= 8:
@@ -47,7 +54,10 @@ class PacketParser:
                 break
             payload = bytes(self.buffer[8:8+length])
             del self.buffer[:8+length]
-            packets.append((kind, a, b, payload))
+            packets.append(((kind, a, b, payload), self.started))
+            # The old incomplete packet is now consumed. Any remaining bytes
+            # begin another packet in this read, not at the old packet's time.
+            self.started = received if self.buffer else None
         if len(self.buffer) > MAX_PAYLOAD + 8:
             raise ProtocolError('ChirunoMod receive buffer exceeded limit')
         return packets
@@ -156,15 +166,14 @@ class ChirunoSource:
             data = self.tcp.recv(65536)
             if not data:
                 raise ProtocolError('ChirunoMod TCP connection closed')
-            if self.partial_since is None:
-                self.partial_since = time.monotonic()
-            for message in self.parser.feed(data):
+            received = time.monotonic()
+            for message, started in self.parser.feed_timed(data, received):
                 self.last_message = message
-                frame = self.decoder.feed(message, self.partial_since)
+                frame = self.decoder.feed(message, started)
                 if frame is not None:
                     self.ready.append(frame)
             # Incomplete packet bytes keep their original deadline across timeouts.
-            self.partial_since = (self.partial_since if self.parser.buffer else None)
+            self.partial_since = self.parser.started
 
     def close(self):
         # Closing is a video-only operation. Never reconnect or send input here.
