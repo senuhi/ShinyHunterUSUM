@@ -227,6 +227,26 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaises(SafetyStop):runner.run()
         runner.receive.assert_not_called();runner.tab.ir.send.assert_not_called()
 
+    def test_chiruno_coexistence_gate_blocks_live_start_and_reset(self):
+        for action in ('run','reset'):
+            runner=runner_for(self.folder,self.profile,False)
+            runner.general.video_backend='ChirunoMod'
+            runner.general.hardware_context={'backend':'ChirunoMod'}
+            self.profile.require_ready=Mock()
+            runner.receive=Mock()
+            if action=='reset':runner.classify()
+            with patch('gift_hunt.require_hardware',side_effect=OSError('HIMEM not verified')):
+                with self.assertRaises(OSError):getattr(runner,action)()
+            runner.receive.assert_not_called();self.assert_no_reset(runner)
+
+    def test_ntr_calibration_receipt_cannot_enable_chiruno(self):
+        receipt=self.profile.path.parent/'ja-poipole.validated.json'
+        data=dict(profile_sha256=self.profile.digest,hardware_verified=True,target='poipole',evidence='SYNTHETIC TEST ONLY',video_backend='NTR-HR')
+        receipt.write_text(json.dumps(data))
+        with self.assertRaises(SafetyStop):self.profile.require_ready(live=True,backend='ChirunoMod')
+        data['video_backend']='ChirunoMod';receipt.write_text(json.dumps(data))
+        self.profile.require_ready(live=True,backend='ChirunoMod')
+
     def test_exception_wrapper_releases_and_does_not_retry(self):
         runner=runner_for(self.folder,self.profile,False)
         with patch('gift_hunt.GiftRunner.run',side_effect=OSError('injected receive failure')):

@@ -7,7 +7,8 @@ import time
 from pathlib import Path
 from PIL import Image
 from gift_recognition import Profile, TARGETS, SafetyStop, roi, colour_verdict
-from ntr_transport import endpoint, open_stream, FrameAssembler
+from ntr_transport import endpoint
+from video_stream import BACKENDS, console_endpoint, open_video
 
 
 def replay(profile, manifest):
@@ -32,26 +33,20 @@ def replay(profile, manifest):
 
 def capture(args):
     local = endpoint(args.local, 8001)
-    console = endpoint(args.console, 8000)
+    console = console_endpoint(args.console, args.backend)
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
-    assembler = FrameAssembler()
-    tcp, udp = open_stream(local, console[0], console[1])
+    source = open_video(args.backend, local, console)
     end = time.monotonic() + args.seconds
     last = {0: 0, 1: 0}
     n = {0: 0, 1: 0}
     try:
         while time.monotonic() < end:
             try:
-                packet, address = udp.recvfrom(65535)
+                frame = source.read()
             except socket.timeout:
                 continue
-            if address[0] != console[0]:
-                continue
-            result = assembler.feed(packet)
-            if result is None:
-                continue
-            screen, image = result
+            screen, image = frame.screen, frame.image
             now = time.monotonic()
             if now - last[screen] < args.interval:
                 continue
@@ -59,8 +54,7 @@ def capture(args):
             n[screen] += 1
             image.save(out / f'{("lower", "upper")[screen]}-{n[screen]:04d}.png')
     finally:
-        udp.close()
-        tcp.close()
+        source.close()
     print(json.dumps(dict(captured=n, controller_packets=0)))
     if not all(n.values()):
         raise SafetyStop('No frames from one or both screens; capture not verified')
@@ -69,9 +63,10 @@ def capture(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    cap = commands.add_parser('capture', help='Passive NTR capture; no controller input')
+    cap = commands.add_parser('capture', help='Direct video capture; no controller input')
+    cap.add_argument('--backend', choices=BACKENDS, default='ChirunoMod')
     cap.add_argument('--local', required=True, help='Mac IPv4:stream-port')
-    cap.add_argument('--console', required=True, help='3DS IPv4[:NTR-TCP-port]')
+    cap.add_argument('--console', required=True, help='3DS IPv4[:video-TCP-port]')
     cap.add_argument('--output', required=True)
     cap.add_argument('--seconds', type=float, default=10)
     cap.add_argument('--interval', type=float, default=.5)
@@ -87,6 +82,7 @@ def main():
         if name in ('replay','attest'):
             sub.add_argument('--cases', required=True, help='JSON fixture manifest')
         if name == 'attest':
+            sub.add_argument('--backend', choices=BACKENDS, default='NTR-HR')
             sub.add_argument('--hardware-verified', action='store_true', required=True,
                              help='Operator attests the hardware checklist has actually passed')
     args = parser.parse_args()
@@ -122,7 +118,7 @@ def main():
             evidence = Path(args.cases).resolve()
             output = profile.path.parent / f'{profile.path.stem}-{profile.target}.validated.json'
             output.write_text(json.dumps(dict(profile_sha256=profile.digest, target=profile.target,
-                hardware_verified=True, evidence=str(evidence),
+                hardware_verified=True, video_backend=args.backend, evidence=str(evidence),
                 evidence_sha256=hashlib.sha256(evidence.read_bytes()).hexdigest(),
                 operator_attested_at=time.time()), indent=2) + '\n', encoding='utf-8')
             print(f'Operator validation receipt: {output}')

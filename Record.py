@@ -7,7 +7,8 @@ from PIL import Image
 from functions import (check, i2L, load_bitmaps, combine_images,
                        resource_path, write_avi, write_anim, flatten)
 from boxBase import ToolTip
-from ntr_transport import endpoint, open_stream, FrameAssembler
+from ntr_transport import endpoint
+from video_stream import console_endpoint, open_video
 from platform_support import capture_directory
 
 # Screen hole positions inside the N3DS console template: the holes
@@ -37,6 +38,7 @@ class Record:
         self.stop.set()
         self.tcp_socket = None
         self.TID = None
+        self.video_source = None
         self.hunterlock = False   # True from ConnectState(1) to (-1)
         self.runmode    = None    # None / 'burst' / 'video' / 'afk'
         self.auto_count = 0
@@ -217,6 +219,9 @@ class Record:
     def Disconnected(self):
         if threading.current_thread() is not threading.main_thread():
             return self.app.call_ui(self.Disconnected)
+        if self.video_source is not None:
+            self.video_source.close()
+            self.video_source = None
         udp = getattr(self, 'udp_socket', None)
         if udp is not None:
             udp.close()
@@ -237,14 +242,16 @@ class Record:
     def connect_procedure(self):
         try:
             local = endpoint(self.General.IPPC.Entry.get(), 8001)
-            console = endpoint(self.General.IPDS.Entry.get(), 8000)
+            backend = self.General.backend.get()
+            console = console_endpoint(self.General.IPDS.Entry.get(), backend)
             self.stop.clear()
             self.General.RecordLock(True)
             self.image[:] = [None, None]
-            self.tcp_socket, self.udp_socket = open_stream(local, console[0], console[1])
+            self.video_source = open_video(backend, local, console)
+            self.tcp_socket, self.udp_socket = self.video_source.tcp, self.video_source.udp
             self.ConnectButton.config(image=self.bitmap['TVon'], relief='sunken')
             self.TIDb = threading.Thread(target=self.stream_thread,
-                                         args=(console[0],), daemon=True)
+                                         args=(self.video_source,), daemon=True)
             self.TIDb.start()
             self.msgbox.MsgAppend('Record: Streaming (no controller input)')
         except Exception as error:
@@ -252,27 +259,21 @@ class Record:
             self.Disconnected()
             self.msgbox.MsgAppend(f'Record: {error}')
 
-    def stream_thread(self, console):
-        assembler = FrameAssembler()
-        udp = self.udp_socket
-        while not self.stop.is_set():
-            try:
-                packet, address = udp.recvfrom(65535)
-                if address[0] != console:
+    def stream_thread(self, source):
+        try:
+            while not self.stop.is_set():
+                try:
+                    frame = source.read()
+                    self.image[frame.screen] = frame.image
+                except socket.timeout:
                     continue
-                result = assembler.feed(packet)
-                if result is not None:
-                    screen, image = result
-                    self.image[screen] = image
-            except socket.timeout:
-                continue
-            except OSError as error:
-                if not self.stop.is_set():
-                    self.msgbox.MsgAppend(f'Record stream stopped: {error}')
-                    self.stop.set()
-                    self.Disconnected()
-                return
-        udp.close()
+        except OSError as error:
+            if not self.stop.is_set():
+                self.msgbox.MsgAppend(f'Record stream stopped: {error}')
+                self.stop.set()
+                self.Disconnected()
+        finally:
+            source.close()
 
     def ModeShow(self):
         # Reflect the current shot mode on the button icon

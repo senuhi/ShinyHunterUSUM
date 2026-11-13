@@ -46,3 +46,13 @@ passive capture/crop/replay/attestation CLI, GUI settings, tests and Japanese
 documentation are included. See [VALIDATION.md](VALIDATION.md) for observed
 checks and remaining physical-console work. No Japanese hardware validation
 receipt or genuine Japanese screenshot is included.
+
+## Old 3DS environment amendment
+
+The operator subsequently identified an Old 3DS LL / Luma3DS v13.4, with
+ChirunoMod v0.2.2 and ChLoad_HIMEM. The priority plan is now
+[OLD3DS_PLAN.md](OLD3DS_PLAN.md): direct ChirunoMod TCP receive, separated video
+sources, bounded full-pass freshness, no-reset coexistence diagnostics and an
+additional operator-verified HIMEM gate. External Chokistream is not a dependency.
+A short ordinary-ChLoad HOME stream has been observed on the actual console;
+HIMEM/USUM/input testing remains a separate phase. See VALIDATION.md.

@@ -7,16 +7,17 @@
 
 ## 1. 操作を送らずに映像を集める
 
-MacとNew 3DS/New 2DSを同一LANに接続し、READMEのNTR-HR/Luma3DSの準備を行います。
-他のNTRビューアを終了します。例のIPは必ず自分の環境に置き換えてください。
+旧3DS LLでは先に [HIMEM上の通信検証](OLD3DS_HIMEM_JA.md) を行います。
+Macと3DSを同一LANに接続し、ChirunoMod v0.2.2へ自前アダプターで接続します。公式Chokistreamは不要です。
+New 3DS／NTRの場合は明示的に `--backend NTR-HR` を指定します。他のビューアは終了します。例のIPは必ず自分の環境に置き換えてください。
 
 ```sh
-.venv/bin/python gift_tools.py capture \
+.venv/bin/python gift_tools.py capture --backend ChirunoMod \
   --local 192.168.1.10:8001 --console 192.168.1.50 \
   --seconds 30 --interval 0.3 --output captures/poipole-dialogue
 ```
 
-このコマンドは映像設定用TCP通信とUDP受信だけを行い、InputRedirectionへは何も送信しません。
+このコマンドはChirunoModの設定・映像受信用TCP通信だけを行い、InputRedirectionへは何も送信しません。
 物理ボタンで会話・メニューを進めてください。画面は回転補正済みのネイティブ解像度で保存されます。
 下画面は320×240、上画面は400×240です。画面番号は **0=下、1=上** です。
 GUIのRecordタブも映像確認に使用できますが、テンプレート作成には非可逆圧縮を追加しないCLIのPNGを推奨します。
@@ -77,11 +78,13 @@ GUIのRecordタブも映像確認に使用できますが、テンプレート�
 - `samples` / `sample_interval`: 新しく完了したフレーム3〜20枚での一致条件。
 
 通常色も色違いも、別タイミング／複数個体／同じ機材・NTR品質で集めます。
+画質や色順も映像方式に依存します。ChirunoModで受信した画像を使い、NTRの校正を流用しません。
 **本物の色違い画像がない状態では実機検証完了にしないでください。**
 黒・白・別画面・遷移中・別個体をunknownの負例として集めます。
 
 `freshness.max_age` は受信停止の上限秒数（既定2秒）、`freeze_timeout` は同一画素が続く上限秒数
-（既定15秒）です。静止メニューでも保守的に停止することがあります。実測の待機時間に合わせて
+（既定15秒）です。`max_span` は完全画面の組み立て時間の上限（省略時2秒）で、
+原画像の古さも最初の分割片から数えます。静止メニューでも保守的に停止することがあります。実測の待機時間に合わせて
 調整できますが、無限待ち／監視無効化にはできません。
 
 ## 4. 記録画像を再判定する
@@ -129,7 +132,7 @@ dry-runは物理ボタンを奪わず、自動入力・リセットを一切送�
 単体テストの模擬画像でこの操作をしないでください。
 
 ```sh
-.venv/bin/python gift_tools.py attest --language Japanese --target poipole \
+.venv/bin/python gift_tools.py attest --language Japanese --target poipole --backend ChirunoMod \
   --cases captures/cases.json --hardware-verified
 ```
 
@@ -145,7 +148,7 @@ L+R+SELECTを一度送ります。色違い候補では停止するので、目�
 
 ## 未検証範囲
 
-本改修環境には3DSがありません。日本語の素材、実ゲームの色分布、会話の到達順序、
-NTR-HRからの実映像、InputRedirectionでの実操作、長時間の厳選は未検証です。
+通常ChLoad＋HOME画面の自前受信は実機確認しました。HIMEM＋日本語USUMの映像・同時操作、
+日本語の認識素材、実ゲームの色分布、会話の到達順序、InputRedirectionでの実操作、長時間の厳選は未検証です。
 純粋なRGB比較とテンプレート照合は任意の誤認識を数学的に排除するものではありません。
 ガードは不明・エラー時に止めるためのものです。無人運転へ移す前に実機データで確認してください。

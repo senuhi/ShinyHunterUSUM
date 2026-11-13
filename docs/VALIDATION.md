@@ -3,6 +3,34 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Old 3DS update: direct receiver and observed HOME stream
+
+The video boundary now has independent NTR-HR and ChirunoMod adapters; no external
+Chokistream process or Java runtime is used. As of this update, 43 local unit /
+loopback tests pass, and native Tk smoke tests pass for BOTH backends, including
+synthetic eight-fraction ChirunoMod JPEG TCP input and passive recognition with
+zero controller packets. Additional tests cover initial mid-pass synchronization,
+partial header/payload timeouts, missing/reordered/slow fractions, RGB correction,
+rotation, timestamp provenance and the Old-3DS hardware/calibration gates.
+
+On 2026-11-13 the operator supplied an Old 3DS LL with Luma3DS v13.4 and ChirunoMod
+v0.2.2, running ordinary ChLoad on HOME. A real LAN test with this app's direct
+receiver observed 15 complete upper passes and 15 complete lower passes in 10.28 s.
+Saved PNGs were inspected: native 400x240 / 320x240, Japanese HOME UI, correct
+orientation and plausible colours. Assembly spans were 0.44–1.36 s upper and
+0.45–1.38 s lower. No Luma input socket was constructed and no controller packets
+or resets were sent. The initial attempt stopped on unexpected JPEG dimensions;
+the cause remains unresolved. A subsequent passive header/dimension inspection
+and separate reconnect test succeeded. No automatic reconnect was introduced.
+
+Private device images/reports remain in ignored `captures/old3ds-home-*` folders.
+This verifies ONLY the short ordinary-ChLoad HOME receive test. It does not verify
+ChLoad_HIMEM + USUM, InputRedirection coexistence, recognition, reset continuity,
+long runs, or startup stability. See [OLD3DS_HIMEM_JA.md](OLD3DS_HIMEM_JA.md).
+No HIMEM coexistence receipt has been created.
+
+The following original environment/check record is retained as history:
+
 ## Environment
 
 - macOS 27.0.1, native arm64 (Apple Silicon), no Rosetta or Wine.
@@ -14,7 +42,7 @@ Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
 | Check | Result and scope |
 | --- | --- |
-| `python -m unittest discover -s tests -v` | 27 tests passed |
+| `python -m unittest discover -s tests -v` | 27 tests passed in the original native-port stage; 43 after the Old 3DS update |
 | `python tests/gui_smoke.py` | Native window creation, Japanese-only target controls, English switching, UTF-8 settings round trip, synthetic JPEG UDP → English passive recognition, zero controller packets, floating popup, clean worker/UI shutdown |
 | Compile/import checks | Modified Python modules compile; GUI module can be imported without creating a Tk window |
 | Transport | Actual loopback TCP setup bytes and UDP bind, actual 20-byte Luma input and return-control packets at a custom port |

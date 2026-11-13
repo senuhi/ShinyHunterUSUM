@@ -1,6 +1,8 @@
 import sys, os, time, io, threading, socket, signal, queue
 from platform_support import set_window_icon
-from ntr_transport import endpoint, open_stream, FrameAssembler, FrameStore
+from ntr_transport import endpoint, FrameStore
+from video_stream import console_endpoint, open_video
+from hardware_validation import hardware_context, require_hardware
 from datetime import datetime
 
 from PIL import Image, ImageTk
@@ -232,6 +234,9 @@ class ShinyHunterUSUM(tk.Tk):
         self.Record.stop.set()
         self.ClosePopup()
         for owner in (self.General, self.Record):
+            source = getattr(owner, 'video_source', None)
+            if source is not None:
+                source.close()
             for name in ('tcp_socket', 'udp_socket'):
                 sock = getattr(owner, name, None)
                 if sock is not None:
@@ -306,22 +311,16 @@ class ShinyHunterUSUM(tk.Tk):
             self.lowerlabel.config(image = self.bitmap['Lower'])
 
     def background_thread(self):
-        assembler = FrameAssembler()
-        udp = self.udp_socket
+        source = self.General.video_source
         store = self.General.frames
         stop = self.General.stop_event
         while not stop.is_set():
             try:
-                packet, addr = udp.recvfrom(65535)
-                if addr[0] != self.General.clientIP:
-                    continue
-                result = assembler.feed(packet)
-                if result is not None:
-                    screen, image = result
-                    store.put(screen, image)
-                    self.image[screen] = image
+                frame = source.read()
+                store.put(frame.screen, frame.image, frame.started, frame.completed)
+                self.image[frame.screen] = frame.image
             except socket.timeout:
-                continue  # FrameStore freshness watchdog catches a silent stream.
+                continue
             except OSError as error:
                 if not stop.is_set():
                     store.error = str(error)
@@ -360,7 +359,11 @@ class ShinyHunterUSUM(tk.Tk):
             if self.TIDm is not None and self.TIDm.is_alive():
                 raise ValueError('Previous hunt is still stopping')
             local = endpoint(self.General.IPPC.Entry.get(), 8001)
-            console = endpoint(self.General.IPDS.Entry.get(), 8000)
+            backend = self.General.backend.get()
+            console = console_endpoint(self.General.IPDS.Entry.get(), backend)
+            input_port = int(self.General.inputport.get())
+            if not 1 <= input_port <= 65535:
+                raise ValueError('Invalid InputRedirection port')
             count = int(self.General.Counter.Entry.get())
             if count < 1:
                 raise ValueError('Counter must be positive')
@@ -371,15 +374,26 @@ class ShinyHunterUSUM(tk.Tk):
                 raise ValueError('Japanese supports only the three gift routes')
             dry_run = bool(self.General.dryvar.get())
             profile_path = self.General.profilevar.get() or None
-            if mode == 1 and target <= 2 and not dry_run:
+            if backend == 'ChirunoMod' and (mode != 1 or target > 2):
+                raise ValueError('ChirunoMod supports only the three gift routes')
+            max_span = 2.0
+            if mode == 1 and target <= 2:
                 from gift_recognition import Profile, TARGETS
-                Profile(language, TARGETS[target], profile_path).require_ready(live=True)
+                profile = Profile(language, TARGETS[target], profile_path)
+                max_span = profile.data['freshness'].get('max_span', 2.0)
+                if not dry_run:
+                    profile.require_ready(live=True, backend=backend)
+            context = hardware_context(backend, console, input_port, max_span=max_span)
+            if not dry_run:
+                require_hardware(context)
             if not self.General.AcquireSlot():
                 return
             self.General.serverIP, self.General.serverport = local
             self.General.clientIP = console[0]
             self.General.start_count = count
             self.General.dry_run = dry_run
+            self.General.video_backend = backend
+            self.General.hardware_context = context
             self.Recv.session_options = (language, target, dry_run, profile_path)
             self.General.frames = FrameStore()
             self.General.stop_event = threading.Event()
@@ -389,23 +403,23 @@ class ShinyHunterUSUM(tk.Tk):
             self._connecting = True
             self.image[:] = [None, None]
             self.TID = threading.Thread(target=self.main_procedure,
-                                        args=(local, console, mode), daemon=True)
+                                        args=(local, console, mode, backend, max_span, input_port), daemon=True)
             self.TID.start()
         except Exception as error:
             self.msgbox.MsgAppend(f'SAFE STOP / 安全停止: {error}')
 
-    def main_procedure(self, local, console, mode):
+    def main_procedure(self, local, console, mode, backend, max_span, input_port):
         try:
-            self.msgbox.MsgAppend('Connecting NTR (no startup reset)...')
-            tcp, udp = open_stream(local, console[0], console[1])
-            self.tcp_socket, self.udp_socket = tcp, udp
-            self.General.tcp_socket, self.General.udp_socket = tcp, udp
+            self.msgbox.MsgAppend(f'Connecting {backend} (no startup reset)...')
+            source = open_video(backend, local, console, max_span=max_span)
+            self.General.video_source = source
+            self.General.tcp_socket, self.General.udp_socket = source.tcp, source.udp
             self.TIDb = threading.Thread(target=self.background_thread, daemon=True)
             self.TIDb.start()
             # InputRedirection protocol uses UDP 4950. Construction sends no packet.
             if self.ir is not None:
                 self.ir.socket.close()
-            self.ir = LumaInputServer(console[0])
+            self.ir = LumaInputServer(console[0], input_port)
             end = time.monotonic() + 30
             while self.image[0] is None or self.image[1] is None:
                 if self.General.stop_event.wait(.1):

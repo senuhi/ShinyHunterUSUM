@@ -79,6 +79,7 @@ class Frame:
     serial: int
     received: float
     changed: float
+    started: float | None = None
 
 
 class FrameStore:
@@ -90,17 +91,17 @@ class FrameStore:
         self.hashes = {}
         self.error = None
 
-    def put(self, screen, img):
-        now = self.clock()
+    def put(self, screen, img, started=None, completed=None):
+        now = self.clock() if completed is None else completed
         digest = hashlib.sha256(img.tobytes()).digest()
         with self.lock:
             old = self.frames.get(screen)
             changed = now if digest != self.hashes.get(screen) else old.changed
             self.frames[screen] = Frame(img.copy(), 1 if old is None else old.serial + 1,
-                                        now, changed)
+                                        now, changed, started)
             self.hashes[screen] = digest
 
-    def snapshot(self, screen, max_age=2.0, freeze_timeout=15.0):
+    def snapshot(self, screen, max_age=2.0, freeze_timeout=15.0, max_span=2.0):
         with self.lock:
             if self.error:
                 raise OSError(self.error)
@@ -108,6 +109,8 @@ class FrameStore:
             now = self.clock()
             if f is None or now - f.received > max_age:
                 raise OSError(f'Stale/missing screen {screen}')
+            if f.started is not None and (f.received - f.started > max_span or now - f.started > max_age):
+                raise OSError(f'Stale/slow screen assembly {screen}')
             if now - f.changed > freeze_timeout:
                 raise OSError(f'Frozen screen {screen}')
             return f

@@ -128,7 +128,8 @@ class Profile:
                 not stage['templates']):
                 raise SafetyStop(f'Invalid stage parameters: {name}')
         fresh = self.data['freshness']
-        if (not finite(fresh['max_age']) or not .1 <= fresh['max_age'] <= 5 or
+        if (not finite(fresh['max_age']) or not .1 <= fresh['max_age'] <= 10 or
+            not finite(fresh.get('max_span', 2.0)) or not .1 <= fresh.get('max_span', 2.0) <= 10 or
             not finite(fresh['freeze_timeout']) or not .5 <= fresh['freeze_timeout'] <= 120):
             raise SafetyStop('Invalid freshness limits')
         colour = self.data['colour']
@@ -144,7 +145,7 @@ class Profile:
             not finite(self.data['load_seconds']) or not 0 <= self.data['load_seconds'] <= 15):
             raise SafetyStop('Invalid movement/load timing')
 
-    def require_ready(self, live=False):
+    def require_ready(self, live=False, backend=None):
         if live and self.missing:
             raise SafetyStop('Missing language templates: ' + ', '.join(self.missing))
         required = ('dialogue_name', 'menu', 'party_level', 'party_name', 'restart_title', 'save_file') if live else ('party_name',)
@@ -162,6 +163,8 @@ class Profile:
                 validation.get('target') != self.target or
                 not validation.get('evidence')):
                 raise SafetyStop('Validation receipt missing, unverified or profile/assets changed')
+            if backend == 'ChirunoMod' and validation.get('video_backend') != backend:
+                raise SafetyStop('ChirunoMod needs calibration on ChirunoMod captures; NTR evidence cannot substitute')
 
     def score(self, name, image):
         stage = self.data['stages'][name]

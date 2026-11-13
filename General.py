@@ -3,6 +3,7 @@ from tkinter import ttk
 import time, tempfile, socket, sys, threading
 from platform_support import lock_slot, data_directory, capture_directory
 from ntr_transport import FrameStore
+from video_stream import BACKENDS
 from dataclasses import dataclass, field
 from PIL import Image
 from datetime import datetime
@@ -38,6 +39,8 @@ class Setting:
     pophalf:   int = 0
     language:  str = 'Japanese'
     profile:   str = ''
+    backend:   str = 'ChirunoMod'
+    inputport: int = 4950
 
 # Define the application class
 class General:
@@ -67,6 +70,9 @@ class General:
         self.stop_event.set()
         self.frames = FrameStore()
         self.dry_run = True
+        self.video_source = None
+        self.video_backend = 'ChirunoMod'
+        self.hardware_context = None
         # Load images
         self.bitmap = load_bitmaps(f'image0/{self.tabname}')
         # Setup the screenshot folder:
@@ -158,6 +164,16 @@ class General:
         tk.Label(options, text='Profile JSON').grid(row=2, column=0, sticky='w')
         self.ProfileEntry = tk.Entry(options, textvariable=self.profilevar, width=24)
         self.ProfileEntry.grid(row=2, column=1, sticky='ew')
+        tk.Label(options, text='Video backend').grid(row=3, column=0, sticky='w')
+        self.backend = tk.StringVar(value='ChirunoMod')
+        self.Backend = ttk.Combobox(options, textvariable=self.backend,
+                                   values=BACKENDS, state='readonly', width=12)
+        self.Backend.grid(row=3, column=1, sticky='w')
+        self.Backend.bind('<<ComboboxSelected>>', self.backend_changed)
+        tk.Label(options, text='Input UDP port').grid(row=4, column=0, sticky='w')
+        self.inputport = tk.StringVar(value='4950')
+        self.InputPort = tk.Entry(options, textvariable=self.inputport, width=12)
+        self.InputPort.grid(row=4, column=1, sticky='w')
         self.LanguageHook = None
         self.RecvLockHook = None
         self.MigrateSetting()
@@ -187,6 +203,11 @@ class General:
         self.dryvar.set(True)
         if self.LanguageHook is not None:
             self.LanguageHook()
+
+    def backend_changed(self, event=None):
+        self.dryvar.set(True)
+        if self.backend.get() == 'ChirunoMod':
+            self.Tab.set(1)
 
     def settingGetInd(self):
         return self.settinglist.index(self.setting.get())
@@ -236,6 +257,8 @@ class General:
                 self.Language.config(state='readonly')
                 self.DryRun.config(state='normal')
                 self.ProfileEntry.config(state='normal')
+                self.Backend.config(state='readonly')
+                self.InputPort.config(state='normal')
                 # Write setting data struct
                 currset = self.settingGetInd()
                 self.GUI2data(currset)
@@ -245,6 +268,9 @@ class General:
                     self.nb.tab(j+1, state='normal')
                 # Close the UDP socket if this run ever opened one;
                 # early failures (the TCP step) have nothing to close
+                if self.video_source is not None:
+                    self.video_source.close()
+                    self.video_source = None
                 if self.udp_socket is not None:
                     try:
                         self.udp_socket.close()
@@ -274,6 +300,8 @@ class General:
                 self.Language.config(state='disabled')
                 self.DryRun.config(state='disabled')
                 self.ProfileEntry.config(state='disabled')
+                self.Backend.config(state='disabled')
+                self.InputPort.config(state='disabled')
                 for j in range(len(self.TabButton)):
                     self.TabButton[j].config(state = 'disabled')
                     self.nb.tab(j+1, state='disabled')
@@ -323,6 +351,8 @@ class General:
         self.data[i].currtab = int(self.Tab.get())
         self.data[i].language = self.language.get()
         self.data[i].profile = self.profilevar.get()
+        self.data[i].backend = self.backend.get()
+        self.data[i].inputport = int(self.inputport.get())
 
     def data2GUI(self, i):
         # For each tab, setting data struct to GUI
@@ -336,6 +366,9 @@ class General:
         self.language.set(self.data[i].language)
         self.profilevar.set(self.data[i].profile)
         self.language_changed()
+        self.backend.set(self.data[i].backend)
+        self.inputport.set(str(self.data[i].inputport))
+        self.backend_changed()
 
     def DefaultData(self):
         # Fresh data struct: 12 default slots
@@ -357,6 +390,10 @@ class General:
                         slot.loto = [int(k) for k in temp[1].split(',')]
                     except ValueError:
                         slot.loto = []
+                case 'backend':
+                    slot.backend = temp[1] if temp[1] in BACKENDS else 'ChirunoMod'
+                case 'inputport':
+                    slot.inputport = int(temp[1])
                 case 'language':
                     slot.language = temp[1] if temp[1] in ('English', 'Japanese') else 'Japanese'
                 case 'profile':
@@ -381,7 +418,10 @@ class General:
             path = self.settingfolder / f'USUMShinyHunter-{i+1}.txt'
             if path.is_file():
                 with open(path, 'r', encoding='utf-8') as f:
-                    self.ParseFields(f.read().split('\n'), data[i])
+                    lines = f.read().split('\n')
+                    if not any(line.startswith('backend=') for line in lines):
+                        data[i].backend = 'NTR-HR'  # Preserve existing saved NTR settings.
+                    self.ParseFields(lines, data[i])
         return data
 
     def WriteSlotFile(self, i, d):
@@ -408,6 +448,8 @@ class General:
             f.write(f'pophalf={d.pophalf}\n')
             f.write(f'language={d.language}\n')
             f.write(f'profile={d.profile}\n')
+            f.write(f'backend={d.backend}\n')
+            f.write(f'inputport={d.inputport}\n')
 
     def WriteSetting(self, data):
         # Write the selected slot to its own file; the other slots
@@ -460,6 +502,8 @@ class General:
             if not (lines and lines[0].strip().isdigit()):
                 continue   # already the per-slot format
             data = self.DefaultData()
+            for slot in data:
+                slot.backend = 'NTR-HR'
             ind = -1
             for line in lines[1:]:
                 if line.startswith('#'):

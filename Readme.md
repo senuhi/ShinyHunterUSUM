@@ -5,7 +5,7 @@
 日本語版USUMの **ベベノム、タイプ：ヌル（ポニ／エーテル）** の受け取り厳選に対応する構造を追加しています。
 
 **日本語版の実画像は未収集、3DS実機での映像・操作・色違い判定は未検証です。**
-現在そのまま使えるのはネイティブGUI、受信・画像収集、校正／再判定と安全停止の仕組みです。
+現在そのまま使えるのはネイティブGUI、自前の映像受信・画像収集、校正／再判定と安全停止の仕組みです。
 日本語テンプレートはプレースホルダで、実画像とルートごとの検証記録がないlive実行は拒否します。
 完全自動厳選の実機動作確認済みリリースではありません。
 
@@ -38,31 +38,41 @@ Homebrew以外では、Tkを含む[python.orgのmacOS版](https://www.python.org
 
 ## 3DS側と通信の準備
 
-1. Luma3DS導入済みの **New 3DS／New 2DS** と日本語版ウルトラサン／ウルトラムーンを用意します。
-   旧3DSは対象外です。上流はLuma3DS v13以降を前提としています。
-2. [NTR-HRの公式配布・説明](https://github.com/xzn/ntr-hr)に従って、New 3DS用のNTR-HRを導入し起動します。
-   本ツールは上流と同じ従来形式のJPEG/UDPストリームを使用します。新しいHR独自のFEC/KCP形式を
-   直接デコードする実装ではありません。従来互換ストリームが受信できる構成で使用してください。
-3. L+下+SELECTでRosalinaを開き、Miscellaneous options → Start InputRedirectionを有効にし、
-   3DSのIPを控えます。[Luma3DS Rosalina公式資料](https://github.com/LumaTeam/Luma3DS/wiki/Rosalina)も参照してください。
-4. Macと3DSを同一LANに接続します。Macは有線LAN、3DSは同じルーターのWi-Fiを推奨します。
-   APのクライアント分離を無効にし、macOSでローカルネットワーク／受信通信の許可が出たら許可します。
-5. GUIの **PC IP** にMacの実際のLAN IPv4と受信ポート（例 `192.168.1.10:8001`）、
-   **3DS IP** に3DSのIPv4（例 `192.168.1.50`）を入力します。初期の127.0.0.1は実機には使えません。
-   MacのWi-Fiアドレスは `ipconfig getifaddr en0` 等で確認できます。インターフェイス名は環境により異なります。
-6. ゲームの文字速度を「はやい」にし、対象を受け取る直前で保存します。手持ちに空きを作り、
-   同種の別個体を入れず、メニューは最初に「ポケモン」を開ける状態にします。
+初代3DS LLは **ChirunoMod v0.2.2＋ChLoad_HIMEM** 用の自前受信を使います。
+**公式ChokistreamやJavaは不要です。** MacからTCP 6464へ直接接続します。
+[旧3DS・HIMEMの準備と受信専用テスト](docs/OLD3DS_HIMEM_JA.md) を先に実施してください。
+通常ChLoad＋HOMEでは実機の両画面受信を確認しましたが、HIMEM＋USUMとInputRedirectionの
+同時動作は未検証で、検証記録が揃うまで自動操作を許可しません。
 
-Mac→3DSはNTR設定用TCP 8000、操作用UDP 4950、3DS→Macは映像用UDP 8001（変更可能）です。
-3DS IPには任意のNTR TCPポートも `IP:port` で指定できます。InputRedirectionの4950はLuma標準です。
-通信ライブラリの `LumaInputServer(host, port=4950)` はカスタムポートも尊重します。
-NTRへ接続する前に受信UDPをbindし、指定したMacのローカルIPからTCP接続します。
-NTRの映像ポートを変更した場合は3DSを再起動してください。他のNTRビューアとは同時に接続しません。
+| 機種／映像方式 | Video backend | 映像の接続 |
+| --- | --- | --- |
+| 初代3DS LL／ChirunoMod | ChirunoMod | Mac→3DS TCP 6464、JPEG・両画面・非インターレース |
+| New 3DS／New 2DS／NTR-HR | NTR-HR | TCP 8000で設定、MacのUDP 8001で従来JPEGを受信 |
+
+NTR-HRは旧3DS用ではありません。旧3DS向け実装はNTR受信コードをそのまま使わず、
+TCPフレーミング、8分割画面の組み立て、色順補正を専用アダプターへ分離しています。
+NTR-HR独自のFEC/KCP形式は対象外です。
+
+共通の操作接続はLuma3DSの **InputRedirection UDP 4950** です。
+L+下+SELECT → RosalinaのMiscellaneous options → Start InputRedirectionで有効にし、
+3DSのIPを控えます。[Luma3DS公式資料](https://github.com/LumaTeam/Luma3DS/wiki/Rosalina)も参照してください。
+Old 3DSではHIMEM／ゲーム起動後の有効状態も再確認します。
+
+Macと3DSを同じLANへ接続します。GUIの **PC IP** にMacのLAN IPv4（例 `192.168.0.29:8001`）、
+**3DS IP** に3DSのIPv4（例 `192.168.0.31`）、**Input UDP port** に4950を指定します。
+ChirunoModではPC IPのポート部分は使わず、TCP送信元のIPv4だけを使います。
+3DS IPは `IP:port` で映像TCPポートを変更できます。初期の127.0.0.1は実機には使えません。
+MacのWi-Fiアドレスは `ipconfig getifaddr en0` 等で確認します（機器によりインターフェイス名は異なります）。
+Macでローカルネットワーク通信の許可が表示されたら許可します。別ビューアとは同時接続しません。
+
+ゲームの文字速度は「はやい」、手持ちは空きを確保し、同種の別個体を入れず、
+メニューの「ポケモン」を最初に開ける状態で受け取り直前に保存します。
+ポニの古道とエーテルパラダイスは別のルートとして校正してください。
 
 ## 画像校正と安全な使い方
 
 `Game Language` はJapanese／Englishを切り替えます。日本語版ではRecvの3ルートだけを選択できます。
-**dry-runは起動・設定スロット変更・言語変更のたびにONへ戻ります。**
+**dry-runは起動・設定スロット変更・言語変更・映像方式変更のたびにONへ戻ります。**
 検証前はこれを維持してください。受信と認識だけを行い、ボタン入力もリセットも送信しません。
 
 日本語版の必須素材、座標・色しきい値の調整、PNG収集、オフライン再判定、
@@ -87,10 +97,11 @@ Recordは言語によらず受信できます。旧機能も既定dry-runでは�
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
 # GUIセッションがあるMacでだけ実行（模擬3DS映像を使います）
-.venv/bin/python tests/gui_smoke.py
+.venv/bin/python tests/gui_smoke.py --backend ChirunoMod
+.venv/bin/python tests/gui_smoke.py --backend NTR-HR
 ```
 
-[変更計画と事前調査](docs/IMPLEMENTATION_PLAN.md)、[検証結果と制限](docs/VALIDATION.md) を参照してください。
+[旧3DS対応計画](docs/OLD3DS_PLAN.md)、[変更計画と事前調査](docs/IMPLEMENTATION_PLAN.md)、[検証結果と制限](docs/VALIDATION.md) を参照してください。
 CIはmacOS／Windows／Linuxのオフラインテストを定義しています。CIの成功は実機動作を保証しません。
 
 ---

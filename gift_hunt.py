@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from gift_recognition import Profile, TARGETS, SafetyStop, colour_verdict
 from tppflush import HIDButtons, CPAD_Commands
+from hardware_validation import require_hardware
 
 
 class Evidence:
@@ -22,7 +23,8 @@ class Evidence:
         if frame is not None:
             name = f'{self.index:06d}-{event}.png'
             frame.image.save(self.directory / name)
-            details.update(image=name, serial=frame.serial, received=frame.received, changed=frame.changed)
+            details.update(image=name, serial=frame.serial, received=frame.received,
+                           changed=frame.changed, assembly_started=frame.started)
         with (self.directory / 'scores.jsonl').open('a', encoding='utf-8') as f:
             f.write(json.dumps(dict(time=time.time(), event=event,
                                    language=self.profile.language, target=self.profile.target,
@@ -44,6 +46,15 @@ class GiftRunner:
             raise SafetyStop('Disconnected by user')
         for screen in (0, 1):
             self.frames.snapshot(screen, **self.profile.data['freshness'])
+
+    def verify_live(self):
+        backend = getattr(self.general, 'video_backend', None)
+        self.profile.require_ready(live=True, backend=backend)
+        if backend == 'ChirunoMod':
+            context = getattr(self.general, 'hardware_context', None)
+            if not context or context.get('backend') != backend:
+                raise SafetyStop('Missing ChirunoMod hardware context')
+            require_hardware(context)
 
     def pause(self, seconds):
         end = time.monotonic() + seconds
@@ -166,8 +177,11 @@ class GiftRunner:
         self.evidence.record('reset_check', current, anchor_score=score, **result)
         if not anchor or result['verdict'] != 'normal':
             raise SafetyStop('Reset denied: final normal/anchor check failed')
-        self.profile.require_ready(live=True)
+        self.verify_live()
         self.evidence.record('reset_authorized')
+        if time.monotonic() - current.received > .5:
+            raise SafetyStop('Reset denied: final verdict expired while writing evidence')
+        self.healthy()
         for button in (HIDButtons.L, HIDButtons.R, HIDButtons.SELECT):
             self.tab.ir.press(button)
         try:
@@ -187,7 +201,10 @@ class GiftRunner:
 
     def run(self):
         self.evidence.record('start', dry_run=self.dry_run)
-        self.profile.require_ready(live=not self.dry_run)
+        if self.dry_run:
+            self.profile.require_ready()
+        else:
+            self.verify_live()
         if self.dry_run:
             # Passive preview only: manually navigate to the received Pokémon.
             self.wait_stage('party_name')
