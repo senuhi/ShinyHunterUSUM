@@ -80,11 +80,11 @@ class LumaInputServer():
 						press(N3DS_Buttons.ZL)
 						press(HID_Buttons.A)
 		"""
-		if btn in HIDButtons:
+		if isinstance(btn, HIDButtons):
 			self.hid_press(btn)
-		elif btn in N3DS_Buttons:
+		elif isinstance(btn, N3DS_Buttons):
 			self.n3ds_zlzr_press(btn)
-		elif btn in Special_Buttons:
+		elif isinstance(btn, Special_Buttons):
 			self.special_press(btn)
 		else:
 			raise ValueError("Invalid button!")	
@@ -99,11 +99,11 @@ class LumaInputServer():
 						unpress(N3DS_Buttons.ZL)
 						unpress(HID_Buttons.A)
 		"""
-		if btn in HIDButtons:
+		if isinstance(btn, HIDButtons):
 			self.hid_unpress(btn)
-		elif btn in N3DS_Buttons:
+		elif isinstance(btn, N3DS_Buttons):
 			self.n3ds_zlzr_unpress(btn)
-		elif btn in Special_Buttons:
+		elif isinstance(btn, Special_Buttons):
 			self.special_unpress(btn)
 		else:
 			raise ValueError("Invalid button!")

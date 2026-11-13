@@ -3,6 +3,32 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: stage 3 one reset → title → continue → field observed
+
+The operator explicitly authorized proceeding without confirming a recent game
+save. This diagnostic records `saved_game_confirmed=false`; it did not save.
+On 2026-11-14, fresh video/reference checks preceded one 0.15 s L+R+SELECT press.
+The Japanese Ultra Sun title was visually reviewed before one START, and the
+selected continue entry was reviewed before one A. Received images then showed
+field gameplay and the Rotom map. Total input: 9 datagrams, no repeated reset.
+
+In 114.259 s, 223 complete passes per screen were received; 121 per screen
+followed continue A. Reset/START/A completed at 2.076/38.515/55.823 s; gameplay
+was visually confirmed by 76.906 s. TCP disconnects and reconnect attempts were
+both zero. This validates continuity for one reset with subsequent input; it
+**does not exercise or validate reconnect fallback after a real disconnection**.
+Twelve freshness-block events withheld further input while waiting for new
+frames. No unknown-state button or reset was sent. Console-side operator
+confirmation and live hardware attestation remain outstanding.
+
+`reset_probe.py` is a separate bounded diagnostic, offline dry-run by default.
+Reviewed title/continue commands have budgets; reset budget is consumed before
+sending. Video-only reconnects cannot reset. The hunt runner's unknown/disconnect
+stop behavior and calibration gates are unchanged. A Python 3.12 button-enum
+routing bug found in preflight was fixed; 50 unit/loopback tests pass, including
+neutral release, zero-input unknown screens and no reset retry on lost video.
+Private evidence: ignored `captures/stage3-reset-live-20261114/`.
+
 ## Latest: stage 2 approved 11-key sequence — observed, with safety stops
 
 On 2026-11-14 the approved direction sequence (right, left, down, up twice),
