@@ -3,6 +3,26 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: stage 1 one-B input — operator-confirmed success
+
+After a packet-generation dry-run, the operator manually opened the normal menu
+and explicitly approved one 0.08 s B press only. Fresh video and three menu-image
+regions were checked before creating the input connection. The input socket
+allowed exactly the planned B-down, B-up and return-physical-control packets;
+each was sent once (20 bytes each). No other key, touch or reset was sent.
+
+Before/after PNGs show the normal menu closing to the Rotom Dex/field screen.
+The operator confirmed that it closed automatically without their own input.
+The 10.032 s probe received 18 upper / 17 lower complete passes in total, including
+15 upper / 14 lower after the input. The measured sender interval between B-down
+and B-up sends was about 0.084 s; no claim is made about exact console scheduling.
+
+This confirms only one real B response with concurrent video, not repeated-key
+stability, reset recovery, gift navigation or shiny accuracy. No live attestation
+was created. Stage 2 has a dry-run plan and is pending separate operator approval.
+See [AUTOMATION_STAGES_JA.md](AUTOMATION_STAGES_JA.md). Private evidence remains
+in ignored `captures/stage1-b-live-20261113/`.
+
 ## Latest: USUM gameplay reception after post-HIMEM InputRedirection enablement
 
 The operator found **Start InputRedirection** (not running) after launching
