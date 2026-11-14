@@ -2,7 +2,8 @@
 
 Recording and default playback are passive. A live session needs explicit GUI
 approval, a pre-receipt save, one reviewed received-screen reset checkpoint,
-and a bounded cycle budget. No save, touch or unrecognized-state input exists.
+and a bounded cycle budget. Fixed navigation uses timed buttons; receipt/reset
+checks remain mandatory. No game-save or touch input exists.
 """
 import json
 import shutil
@@ -135,7 +136,7 @@ class Rehearsal:
             while not self.stop.is_set():
                 try: frame = self.source.read()
                 except socket.timeout:
-                    if min(self.counts.values()):self.healthy()
+                    if min(self.counts.values()):self.transport_healthy()
                     elif time.monotonic()-self.started>15:raise SafetyStop('15秒以内に両画面を受信できませんでした。')
                     continue
                 self.store.put(frame.screen, frame.image, frame.started, frame.completed)
@@ -155,6 +156,23 @@ class Rehearsal:
         if self.stop.is_set(): raise SafetyStop('受信が停止しています。再接続してください。')
         return {str(s): self.store.snapshot(s, max_age=2, max_span=2, freeze_timeout=15)
                 for s in (0, 1)}
+
+    def transport_healthy(self):
+        """Receiver-only check. Input always retains the stricter origin limit."""
+        if self.stop.is_set():raise SafetyStop('受信が停止しています。再接続してください。')
+        return {str(s):self.store.snapshot(s,max_age=2,max_span=2,freeze_timeout=15,check_origin=False) for s in (0,1)}
+
+    def recognition_frames(self):
+        try:frames=self.healthy()
+        except OSError:
+            self.transport_healthy()  # Silence, frozen video or bad assembly still stops.
+            if not self.report.get('waiting_for_fresh_frames'):
+                self.report['waiting_for_fresh_frames']=True
+                self.event('input_paused_for_fresh_frames')
+                self.notify('status','新しい両画面が揃うまで入力を一時停止しています。')
+            return None
+        if self.report.pop('waiting_for_fresh_frames',False):self.event('fresh_frames_resumed')
+        return frames
 
     def capture(self, name, boxes):
         frames = self.healthy(); references = {}
@@ -239,6 +257,12 @@ class Rehearsal:
             with Image.open(self.trace_directory/step['references'][key]) as reference:
                 if image_score(current[key].image,reference,box) > .035:
                     raise SafetyStop('送信直前に画面が変わりました。入力しません。')
+        self.pulse(name,controller)
+
+    def pulse(self, name, controller):
+        """Existing Luma button transport, with no navigation image matching."""
+        if name not in BUTTONS:raise SafetyStop('未対応の操作です。')
+        self.healthy()
         buttons = (HIDButtons.L, HIDButtons.R, HIDButtons.SELECT) if name=='RESET' else (getattr(HIDButtons, name),)
         for button in buttons: controller.press(button)
         if name=='RESET': self.report['reset_attempts'] += 1

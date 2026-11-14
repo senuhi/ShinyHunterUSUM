@@ -126,7 +126,9 @@ class AutomaticDelivery:
     def observe(self,stage,since,previous='',timeout=25):
         end=time.monotonic()+timeout;serials={};last=None;stable=0;fresh=0
         while time.monotonic()<end:
-            frames=self.engine.healthy()
+            frames=self.engine.recognition_frames()
+            if frames is None:
+                stable=0;last=None;fresh=0;self.engine.stop.wait(.03);continue
             if not all(frames[k].serial>serials.get(k,0) and frames[k].started is not None and frames[k].started>=since for k in ('0','1')):
                 self.engine.stop.wait(.03);continue
             serials={k:f.serial for k,f in frames.items()};fresh+=1
@@ -164,7 +166,8 @@ class AutomaticDelivery:
                     if all(s<=.035 for s in scores.values()):decision,text='field','verified_field'
             self.engine.event('automatic_ocr',stage=stage,rows=rows,decision=decision,text=text)
             self.engine.notify('ocr',text or '文字を認識できません')
-            self.engine.healthy()
+            if self.engine.recognition_frames() is None:
+                stable=0;last=None;fresh=0;continue
             if decision!='unknown' and text!=previous:
                 signature=(decision,text)
                 stable=stable+1 if signature==last else 1;last=signature
@@ -195,7 +198,9 @@ class AutomaticDelivery:
         if self.baseline is None:raise SafetyStop('復帰の基準画像がありません。追加操作せず停止します。')
         end=time.monotonic()+45;stable=0;serials={}
         while time.monotonic()<end:
-            frames=self.engine.healthy()
+            frames=self.engine.recognition_frames()
+            if frames is None:
+                stable=0;self.engine.stop.wait(.03);continue
             if not all(frames[k].serial>serials.get(k,0) and frames[k].started is not None and frames[k].started>=since for k in ('0','1')):
                 self.engine.stop.wait(.03);continue
             serials={k:f.serial for k,f in frames.items()}

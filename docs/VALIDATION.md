@@ -3,7 +3,48 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
-## Latest: real Pikachu receipt reached; diacritic fix and receipt recovery
+## Latest: one saved NPC start, timed navigation (2026-11-14)
+
+Per the operator's correction, the default diagnostic now starts only in the
+saved pre-receipt field, facing the gift NPC with no conversation open. It does
+not offer title, dialogue or received-state resume starts. The current connection's
+passive preflight sends nothing and supplies the sole baseline for the final check.
+
+The bounded sequence is A × 3 at 3-second intervals, post-receipt consensus and
+final recheck, reset once, wait 25 seconds, START, wait 5 seconds, A, wait 12 seconds,
+then confirm the saved field. Existing Luma press/release/return transport is reused.
+No intermediate dialogue/title/continue OCR or template matching is performed.
+No game save or shiny classification is performed. Unknown/weak receipt results
+stop without extra A or reset. A full run is at most six presses / 18 datagrams.
+
+The latest physical attempt confirmed the received message and sent exactly one
+reset (3 datagrams), reaching the Japanese Ultra Sun title. It then stopped before
+START: title animation/blinking made template matching unstable, and the origin
+age check failed while a new fraction set was arriving. No complete physical
+receive/reset/restore cycle has been observed. This change removes title matching.
+
+Input still requires each image's origin age and assembly span <= 2 seconds.
+A recent completed image with an older origin temporarily pauses inputs, while
+video reception continues waiting for a fresh pass. Receiver checks still reject
+completion silence > 2 seconds, assembly > 2 seconds, frozen pixels > 15 seconds
+and errors. These conditions stop; they never authorize a reset or runtime retry.
+The primary hunt runner's strict snapshots and calibration gates are unchanged.
+
+80 unit/loopback tests passed. The native Tk integration used real loopback
+Chiruno TCP/Luma UDP and Apple's local Vision OCR with synthetic screens. It
+passed the fixed six presses / 18 datagrams and one completed cycle, including
+a 1.1-second injected fraction delay. Navigation screens intentionally had no
+recognition templates. Requested waits were asserted as [3,3,3,25,5,12] but
+shortened for this mock test: this does not validate real console timing.
+Unit tests reject unknown receipts without reset, confirm passive zero input,
+and verify origin-age pauses versus true transport silence. No physical console
+was connected or controlled during these software checks. Hardware verification
+of the updated fixed sequence remains pending.
+
+The former received-state recovery implementation below is historical; the
+default GUI no longer exposes it. Private physical logs/images remain untracked.
+
+## History: real Pikachu receipt reached; diacritic fix and receipt recovery
 
 The operator's application advanced the real Japanese Pikachu delivery using
 three A presses (9 datagrams). The operator and screenshot confirm the received

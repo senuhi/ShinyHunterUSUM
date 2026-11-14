@@ -16,7 +16,7 @@ class RehearsalWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
         self.app = app; self.engine = None; self.events = queue.Queue(); self.closed = False
-        self.title('実機テスト · 自動受取とリセット')
+        self.title('実機テスト · 固定手順の受取とリセット')
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.columnconfigure(0, weight=1)
         self.photos = {}; self.drawn = {}; self.drag_start = {}; self.rectangles = {}
@@ -32,8 +32,8 @@ class RehearsalWindow(tk.Toplevel):
         self.scores = tk.StringVar(value='照合スコア: 未測定（一致は0に近い値）')
         self.log_path = tk.StringVar(value='記録先は受信開始後に表示します。')
         body = ttk.Frame(self, padding=10); body.grid(sticky='nsew'); body.columnconfigure(0, weight=1)
-        ttk.Label(body, text='日本語ピカチュウ · 自動受取とリセットを試験', font=('', 14, 'bold')).grid(row=0, sticky='w')
-        ttk.Label(body, text='受取前に手動セーブ・手持ちの空きを1つ以上確保。受取後は保存しないでください。\n受信開始 → 認識確認（送信0）→ 自動テスト1周。手動の操作記録は不要です。').grid(row=1, sticky='w', pady=(4, 8))
+        ttk.Label(body, text='日本語ピカチュウ · 固定手順で受取とリセットを試験', font=('', 14, 'bold')).grid(row=0, sticky='w')
+        ttk.Label(body, text='開始は「受取前に保存した受取員の前・会話なし」のみ。手持ちに空きを1つ以上確保。\n受信開始 → 接続確認（送信0）→ 固定手順で1周。受取後は保存しません。').grid(row=1, sticky='w', pady=(4, 8))
 
         connection = ttk.Frame(body); connection.grid(row=2, sticky='ew')
         self.settings = []
@@ -87,18 +87,17 @@ class RehearsalWindow(tk.Toplevel):
         self.next_button.grid(row=1,column=5,padx=6)
         ttk.Button(play,text='記録を読み込む',command=self.load).grid(row=1,column=3,columnspan=2)
         self.record_frame=record;self.play_frame=play
-        self.auto_frame=ttk.LabelFrame(body,text='記録なしの自動テスト（最大1周）',padding=8)
-        ttk.Label(self.auto_frame,text='会話中から開始できます。受取完了を確認した場合だけ、リセットを1回送ります。\nその後タイトル・つづきから・開始位置への復帰を自動で確認します。').grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,6))
-        self.saved_check=ttk.Checkbutton(self.auto_frame,text='配達員の前で、受取前セーブ済み・手持ちに空きあり',variable=self.saved)
+        self.auto_frame=ttk.LabelFrame(body,text='開始位置を固定した1周テスト',padding=8)
+        ttk.Label(self.auto_frame,text='Aを3秒間隔で3回 → 受取後の判定 → リセット1回 → 25秒待機 → START\n→ 5秒待機 → A → 12秒待機 → 最後に受取前の画面への復帰確認。通常約1分です。').grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,6))
+        self.saved_check=ttk.Checkbutton(self.auto_frame,text='受取員の前・会話なし・受取前セーブ済み・手持ちに空きあり',variable=self.saved)
         self.saved_check.grid(row=1,column=0,columnspan=3,sticky='w')
-        self.auto_check_button=ttk.Button(self.auto_frame,text='1. 認識確認（送信0）',command=lambda:self.automatic(False))
+        self.auto_check_button=ttk.Button(self.auto_frame,text='1. 接続確認（送信0）',command=lambda:self.fixed(False))
         self.auto_check_button.grid(row=2,column=0,pady=8,sticky='w')
-        self.auto_live_button=ttk.Button(self.auto_frame,text='2. 自動テスト1周',command=lambda:self.automatic(True))
+        self.auto_live_button=ttk.Button(self.auto_frame,text='2. 固定手順で1周',command=lambda:self.fixed(True))
         self.auto_live_button.grid(row=2,column=1,padx=8,pady=8,sticky='w')
-        self.auto_recover_button=ttk.Button(self.auto_frame,text='受取後の復帰テスト',command=lambda:self.automatic(True,True))
-        ttk.Label(self.auto_frame,text='初回のOCR準備には約40〜60秒かかる場合があります。準備中は入力しません。').grid(row=3,column=0,columnspan=3,sticky='w')
+        ttk.Label(self.auto_frame,text='途中の会話・タイトルは画像判定しません。判定器の初回準備中は入力を送りません。').grid(row=3,column=0,columnspan=3,sticky='w')
         self.toggle_advanced()
-        ttk.Label(body,text='色違い判定はしません。未知の画面・映像停止・通信断では停止し、再リセットしません。').grid(row=7,sticky='w',pady=(6,0))
+        ttk.Label(body,text='この診断は色違い判定なし。通信・映像異常で停止し、受取後の判定不明ではリセットしません。').grid(row=7,sticky='w',pady=(6,0))
         ttk.Label(body,textvariable=self.status_text,wraplength=740).grid(row=8,sticky='w',pady=4)
         ttk.Label(body,textvariable=self.stats).grid(row=9,sticky='w')
         ttk.Label(body,textvariable=self.scores).grid(row=10,sticky='w')
@@ -201,27 +200,26 @@ class RehearsalWindow(tk.Toplevel):
             self.reset_roi_button.pack(side='right')
             self.auto_frame.grid_remove();self.record_frame.grid();self.play_frame.grid()
         else:
-            self.help_text.set('手動記録は不要です。受信後に「認識確認（送信0）」を押してください。')
+            self.help_text.set('毎回、受取前に保存した受取員の前から開始します。手動記録は不要です。')
             self.reset_roi_button.pack_forget()
             self.record_frame.grid_remove();self.play_frame.grid_remove()
             self.auto_frame.grid(row=5,sticky='ew',pady=6)
 
-    def automatic(self, live, resume_received=False):
+    def fixed(self, live):
         def action():
             engine=self.require_engine()
             if live and not self.saved.get():raise ValueError('受取前セーブ・配達員の前・手持ちの空きを確認してください。')
-            from automatic_delivery import AutomaticDelivery
-            runner=AutomaticDelivery(engine)
-            if live and not engine.report.get('automatic_dry_run_verified'):
-                raise ValueError('先に「1. 認識確認（送信0）」を完了してください。')
+            from fixed_delivery import FixedDelivery
+            runner=FixedDelivery(engine)
+            if live and not engine.report.get('fixed_preflight_verified'):
+                raise ValueError('受取員の前で「1. 接続確認（送信0）」を行ってください。')
             approved=False
             if live:
-                text=('現在の受取済み画面から、リセット1回→START→続きからA→開始位置の復帰確認を行います。\n新しい受取操作は送りません。最大3操作です。' if resume_received else
-                      '日本語ピカチュウの受取会話を自動で進めます。\n受取完了を確認できた場合だけリセット1回→START→続きからA→復帰確認を行います。\n最大15操作です。')
+                text='受取員の前（会話なし）から開始します。\nAを3秒間隔で3回送り、受取後だけ判定します。\n確認できた場合だけ、リセット1回→25秒→START→5秒→A→12秒→復帰確認。\n\n最大6操作。会話途中・タイトルでは画像判定しません。'
                 approved=messagebox.askyesno('自動受取・リセットを1周だけ実行',
-                    text+'\n\nセーブ・色違い判定は行いません。\n読めない画面・映像停止・通信断では停止します。\n\n今回の試験を実行しますか？',parent=self)
+                    text+'\n\nセーブ・色違い判定は行いません。\n受取後の判定不明・映像停止・通信断ではリセットしません。\n\n保存した受取員の前から1周を実行しますか？',parent=self)
                 if not approved:return
-            runner.start(saved=self.saved.get(),approved=approved,live=live,resume_received=resume_received)
+            runner.start(saved=self.saved.get(),approved=approved,live=live)
         self.attempt(action)
 
     def manual_next(self):
@@ -271,14 +269,6 @@ class RehearsalWindow(tk.Toplevel):
             self.stats.set(f'上 {counts[1]}枚 / 下 {counts[0]}枚 · 入力 {report["controller_packets"]}パケット · リセット {report["reset_attempts"]}回 · 完了 {report["completed_cycles"]}周 · 復帰 {report.get("completed_recoveries",0)}回')
             state='disabled' if self.engine.playing else 'normal'
             for widget in (self.record_button,self.finish_button,self.play_button,self.auto_check_button,self.auto_live_button):widget.config(state=state)
-            if report.get('automatic_ready_state')=='received':
-                self.saved_check.config(text='受取前セーブ済み（受取後は保存していない）')
-                self.auto_live_button.config(state='disabled')
-                self.auto_recover_button.grid(row=2,column=1,padx=8,pady=8,sticky='w');self.auto_live_button.grid_remove()
-                self.auto_recover_button.config(state=state)
-            else:
-                self.saved_check.config(text='配達員の前で、受取前セーブ済み・手持ちに空きあり')
-                self.auto_recover_button.grid_remove();self.auto_live_button.grid(row=2,column=1,padx=8,pady=8,sticky='w')
             for widget in self.settings:widget.config(state='disabled' if self.busy else 'normal')
             self.backend_box.config(state='disabled' if self.busy else 'readonly')
         self.after(100,self.tick)
