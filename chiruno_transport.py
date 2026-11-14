@@ -6,6 +6,7 @@ Old 3DS fractions are published only after a complete ordered pass per screen.
 import io
 import socket
 import struct
+import threading
 import time
 from dataclasses import dataclass
 from PIL import Image
@@ -14,6 +15,11 @@ MAX_PAYLOAD = 1024 * 1024
 
 
 class ProtocolError(OSError):
+    pass
+
+
+class StartupImageError(ProtocolError):
+    """Observed first-video-packet quirk; never a publishable image."""
     pass
 
 
@@ -76,6 +82,7 @@ class ChirunoDecoder:
         self.clock, self.max_span = clock, max_span
         self.pending = {}
         self.synchronized = set()
+        self.video_messages = 0
 
     def feed(self, message, packet_started=None):
         kind, flags, sub_b, data = message
@@ -95,8 +102,12 @@ class ChirunoDecoder:
         if not fractional and index:
             raise ProtocolError('Fraction index without fractional flag')
         expected_height = width // 8 if fractional else width
+        first_image = self.video_messages == 0
+        self.video_messages += 1
         try:
             with Image.open(io.BytesIO(data)) as source:
+                if first_image and source.format == 'JPEG' and source.size == (2, 50) and flags == 1 and sub_b == 8:
+                    raise StartupImageError('ChirunoMod initial 2x50 JPEG; no frame published')
                 if source.format != 'JPEG' or source.size not in ((240, expected_height), (256, expected_height)):
                     raise ProtocolError(f'Unexpected ChirunoMod JPEG dimensions {source.size}; '
                                         f'flags={flags:#x}, fraction={sub_b:#x}, expected=240x{expected_height}')
@@ -104,6 +115,8 @@ class ChirunoDecoder:
                 r, g, b = rgb.split()
                 image = Image.merge('RGB', (b, g, r)).rotate(90, expand=True)
                 image.load()
+        except StartupImageError:
+            raise
         except (OSError, ValueError) as error:
             raise ProtocolError(f'Invalid ChirunoMod image: {error}') from error
         now = self.clock()
@@ -136,22 +149,35 @@ class ChirunoDecoder:
 
 class ChirunoSource:
     def __init__(self, local, console, quality=80, max_span=2.0):
-        self.tcp = socket.create_connection(console, timeout=5, source_address=(local[0], 0))
+        self.local, self.console, self.quality = local, console, quality
+        self.read_limit = max_span
+        self.startup_retries = 0
+        self._frames_published = False
+        self._closed = threading.Event()
         self.udp = None
+        self._connect()
+
+    def _connect(self):
+        tcp = socket.create_connection(self.console, timeout=5, source_address=(self.local[0], 0))
+        try:
+            if self._closed.is_set():raise OSError('Video connection cancelled')
+            tcp.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            tcp.settimeout(.3)
+            for data in setup_packets(self.quality):
+                if self._closed.is_set():raise OSError('Video connection cancelled')
+                tcp.sendall(data)
+        except Exception:
+            tcp.close()
+            raise
+        self.tcp = tcp
+        if self._closed.is_set():
+            tcp.close()
+            raise OSError('Video connection cancelled')
         self.parser = PacketParser()
-        self.decoder = ChirunoDecoder(max_span)
+        self.decoder = ChirunoDecoder(self.read_limit)
         self.ready = []
         self.last_message = None
         self.partial_since = None
-        self.read_limit = max_span
-        try:
-            self.tcp.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.tcp.settimeout(.3)
-            for data in setup_packets(quality):
-                self.tcp.sendall(data)
-        except Exception:
-            self.tcp.close()
-            raise
 
     def read(self):
         deadline = time.monotonic() + .3
@@ -169,14 +195,27 @@ class ChirunoSource:
             received = time.monotonic()
             for message, started in self.parser.feed_timed(data, received):
                 self.last_message = message
-                frame = self.decoder.feed(message, started)
+                try:
+                    frame = self.decoder.feed(message, started)
+                except StartupImageError:
+                    if self.startup_retries or self._frames_published or self._closed.is_set():raise
+                    # A single read-only reconnection, before ANY complete frame.
+                    # All other errors and all later errors fail closed.
+                    self.startup_retries += 1
+                    self.tcp.close()
+                    if self._closed.wait(.2):raise OSError('Video connection cancelled')
+                    self._connect()
+                    deadline = time.monotonic() + .3
+                    break
                 if frame is not None:
+                    self._frames_published = True
                     self.ready.append(frame)
             # Incomplete packet bytes keep their original deadline across timeouts.
             self.partial_since = self.parser.started
 
     def close(self):
         # Closing is a video-only operation. Never reconnect or send input here.
+        self._closed.set()
         try:
             self.tcp.shutdown(socket.SHUT_RDWR)
         except OSError:

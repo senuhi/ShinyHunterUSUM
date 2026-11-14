@@ -3,6 +3,25 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: bounded read-only recovery of the first 2x50 JPEG
+
+The first application connection after console startup failed on the same
+2x50 upper JPEG previously observed; the operator retried and reported video.
+No controller packet or game reset was sent by that failed connection.
+
+The source now retries TCP video setup once only for that exact first-video
+JPEG signature (kind 1, flags 1, fraction 8, dimensions 2x50), before any complete
+frame has been published. Invalid images are never displayed or counted as
+fresh frames. A repeated startup error, any other error, a later error after
+valid video, or explicit close cannot trigger another connection. Stop/cancel
+also prevents reconnecting. The normal runtime stop behavior is unchanged.
+
+All 73 unit/loopback tests pass. A real loopback server exercised failure on the
+first connection, successful complete-pass reception on the second, and no
+reconnect after EOF. This automatic recovery has not yet been observed on the
+physical console. Existing GUI processes need a restart to load the change;
+the operator's currently successful connection was not interrupted.
+
 ## Latest: automatic delivery GUI, ready for hardware validation
 
 On 2026-11-14 the default diagnostic window was changed to passive recognition

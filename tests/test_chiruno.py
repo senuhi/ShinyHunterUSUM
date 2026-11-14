@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch, call
 from contextlib import redirect_stdout
 from PIL import Image, ImageDraw
-from chiruno_transport import packet, setup_packets, PacketParser, ChirunoDecoder, ChirunoSource, ProtocolError, MAX_PAYLOAD, VideoFrame
+from chiruno_transport import packet, setup_packets, PacketParser, ChirunoDecoder, ChirunoSource, ProtocolError, StartupImageError, MAX_PAYLOAD, VideoFrame
 from ntr_transport import FrameStore
 from video_stream import console_endpoint
 from hardware_probe import probe
@@ -37,7 +37,76 @@ def wire_message(message):
     return packet(kind,a,data,b)
 
 
+def startup_image():
+    buffer=io.BytesIO();Image.new('RGB',(2,50),'black').save(buffer,'JPEG')
+    return 1,1,8,buffer.getvalue()
+
+
 class ChirunoTests(unittest.TestCase):
+    def test_only_first_exact_startup_image_is_retryable(self):
+        with self.assertRaises(StartupImageError):ChirunoDecoder().feed(startup_image())
+        decoder=ChirunoDecoder();decoder.feed(image_message(1,4))
+        with self.assertRaises(ProtocolError) as error:decoder.feed(startup_image())
+        self.assertNotIsInstance(error.exception,StartupImageError)
+        other=list(startup_image());other[1]=0x11
+        with self.assertRaises(ProtocolError) as error:ChirunoDecoder().feed(other)
+        self.assertNotIsInstance(error.exception,StartupImageError)
+
+    def test_startup_error_is_retried_once_not_forever(self):
+        sockets=[Mock(),Mock()]
+        for sock in sockets:sock.recv.return_value=wire_message(startup_image())
+        with patch('chiruno_transport.socket.create_connection',side_effect=sockets) as connect:
+            source=ChirunoSource(('127.0.0.1',8001),('127.0.0.1',6464))
+            try:
+                with self.assertRaises(StartupImageError):source.read()
+                self.assertEqual(source.startup_retries,1);self.assertEqual(connect.call_count,2)
+            finally:source.close()
+
+    def test_no_retry_after_good_video_or_explicit_close(self):
+        for closed in (False,True):
+            sock=Mock();sock.recv.side_effect=([wire_message(startup_image())] if closed else
+                [wire_message(image_message(1)),wire_message(startup_image())])
+            with patch('chiruno_transport.socket.create_connection',return_value=sock) as connect:
+                source=ChirunoSource(('127.0.0.1',8001),('127.0.0.1',6464))
+                try:
+                    if closed:source.close()
+                    else:self.assertIsNotNone(source.read())
+                    with self.assertRaises(ProtocolError):source.read()
+                    self.assertEqual(source.startup_retries,0);connect.assert_called_once()
+                finally:source.close()
+
+    def test_real_tcp_startup_retry_then_complete_frame(self):
+        listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(3)
+        received=[];errors=[]
+        def server():
+            try:
+                for index in range(2):
+                    connection,_=listener.accept();connection.settimeout(3)
+                    with connection:
+                        data=b''
+                        while len(data)<44:data+=connection.recv(44-len(data))
+                        received.append(data)
+                        if index==0:
+                            connection.sendall(wire_message(startup_image()))
+                            self.assertEqual(connection.recv(1),b'')
+                        else:
+                            for fraction in range(8):connection.sendall(wire_message(image_message(1,fraction)))
+            except Exception as error:errors.append(str(error))
+        worker=threading.Thread(target=server);worker.start()
+        with patch('chiruno_transport.socket.create_connection',wraps=socket.create_connection) as connect:
+            source=ChirunoSource(('127.0.0.1',8001),listener.getsockname())
+            try:
+                frame=None;deadline=time.monotonic()+3
+                while frame is None and time.monotonic()<deadline:
+                    try:frame=source.read()
+                    except socket.timeout:pass
+                self.assertIsNotNone(frame);self.assertEqual(frame.image.size,(400,240))
+                self.assertEqual(source.startup_retries,1)
+                with self.assertRaises(ProtocolError):source.read()
+                self.assertEqual(connect.call_count,2)
+            finally:source.close();worker.join(3);listener.close()
+        self.assertFalse(errors);self.assertEqual(received,[b''.join(setup_packets())]*2)
+
     def test_endpoints_do_not_confuse_ntr_and_chiruno(self):
         self.assertEqual(console_endpoint('192.168.1.2','ChirunoMod'),('192.168.1.2',6464))
         self.assertEqual(console_endpoint('192.168.1.2','NTR-HR'),('192.168.1.2',8000))

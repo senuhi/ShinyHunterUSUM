@@ -147,6 +147,7 @@ class Rehearsal:
         except Exception as error:
             if not self.stop.is_set(): self.fail(error)
         finally:
+            self.report['video_startup_retries']=getattr(self.source,'startup_retries',0)
             if self.source is not None: self.source.close()
             self.write_report()
 
