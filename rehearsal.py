@@ -112,11 +112,17 @@ class Rehearsal:
                 elapsed=time.monotonic()-self.started), ensure_ascii=False, indent=2)+'\n')
 
     def fail(self, error):
-        with self.lock:
-            for screen, image in self.latest.items():
-                image.save(self.directory/f'safe-stop-{screen}.png')
-        self.event('safe_stop', error=str(error)); self.stop.set()
-        self.status('安全停止: '+str(error))
+        # Stop before any disk I/O: even a logging failure cannot leave input enabled.
+        self.stop.set()
+        text='安全停止: '+str(error)
+        self.report['status']=text;self.notify('status',text)
+        try:
+            with self.lock:
+                for screen, image in self.latest.items():
+                    image.save(self.directory/f'safe-stop-{screen}.png')
+            self.event('safe_stop', error=str(error));self.write_report()
+        except OSError as log_error:
+            self.report['logging_error']=str(log_error)
 
     def connect(self):
         self.reader = threading.Thread(target=self._receive, daemon=True)

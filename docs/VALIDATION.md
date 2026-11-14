@@ -3,6 +3,38 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: automatic delivery GUI, ready for hardware validation
+
+On 2026-11-14 the default diagnostic window was changed to passive recognition
+check followed by one opt-in automatic Japanese Pikachu delivery/reset/restore.
+Manual recording remains in an optional advanced panel. The hunt calibration
+and hardware gates remain unchanged; this diagnostic never classifies shininess
+or saves the game. A pre-receipt save declaration and explicit in-app permission
+are required, with at most 15 actions and one reset.
+
+69 unit/loopback tests pass. A native-GUI integration test used actual loopback
+Chiruno TCP and InputRedirection UDP plus Apple's real Vision OCR, with synthetic
+game images/transitions. It completed field → dialogue → received → reset →
+title → continue → field with five key/chord presses (15 datagrams, one reset).
+The recognition check sent zero inputs. Non-loopback connections were forbidden
+by a Python audit hook. No physical 3DS was connected or operated in this work.
+The new GUI's actual delivery/reset behavior on hardware is still unverified.
+
+Saved real dialogue/title/continue frames were inspected offline. Initial Vision
+model preparation took about 39–41 seconds; later requests took 0.1–0.3 seconds.
+A pinned Japanese-capable Vision revision and a 65-second passive warmup replace
+the previous too-short initialization limit. Synthetic receipt/question/future,
+black/white and corrected/uncorrected OCR cases were checked. These are not real
+Japanese receipt fixtures and do not establish receipt recognition accuracy.
+
+Reset requires an exact past-tense Pikachu receipt message, primary OCR score
+at least 0.9, agreeing uncorrected text (score at least 0.5), repeated fresh
+observations and a final recheck. Question/quotation/future/weak/changed messages
+cannot authorize reset. Subsequent title/continue use cropped real UI references;
+ROI scores reject blank/wrong screens. Static examples do not prove all visual
+variants. Stream errors stop the run, with no reconnect/reset retry. Logging
+failure sets the stop flag before attempting further disk writes.
+
 ## Latest: stage 3 one reset → title → continue → field observed
 
 The operator explicitly authorized proceeding without confirming a recent game

@@ -52,6 +52,17 @@ class Controller:
 
 
 class RehearsalTests(unittest.TestCase):
+    def test_logging_failure_cannot_leave_input_enabled(self):
+        with tempfile.TemporaryDirectory() as td:
+            engine=Rehearsal('ChirunoMod',('127.0.0.1',8001),('127.0.0.1',6464),4950,td)
+            def unavailable(*args,**kwargs):
+                self.assertTrue(engine.stop.is_set())
+                raise OSError('disk unavailable')
+            with patch.object(engine,'event',side_effect=unavailable):engine.fail('video lost')
+            self.assertTrue(engine.stop.is_set())
+            self.assertIn('video lost',engine.report['status'])
+            self.assertIn('disk unavailable',engine.report['logging_error'])
+
     def test_recording_and_confirmation_never_construct_controller(self):
         with tempfile.TemporaryDirectory() as td,patch('rehearsal.LumaInputServer') as controller:
             engine=prepared(td)

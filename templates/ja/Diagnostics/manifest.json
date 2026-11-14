@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "source": "Japanese Ultra Sun / ChirunoMod 0.2.2, operator-authorized reset diagnostic",
+  "stages": {
+    "title": {
+      "box": [
+        95,
+        205,
+        325,
+        234
+      ],
+      "template": "title.png",
+      "threshold": 0.1
+    },
+    "continue": {
+      "box": [
+        165,
+        6,
+        333,
+        37
+      ],
+      "template": "continue.png",
+      "threshold": 0.04
+    },
+    "field_hud": {
+      "box": [
+        0,
+        0,
+        320,
+        95
+      ],
+      "template": "field_hud.png",
+      "threshold": 0.04
+    }
+  }
+}

@@ -176,4 +176,6 @@ tests/avi_test/
 captures/
 profiles/*.validated.json
 *.local.json
+# Private per-conversation handoff (device addresses and local capture paths).
+docs/RESUME_JA.md
 .DS_Store

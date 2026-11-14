@@ -1,3 +1,5 @@
 # Python 3.10+; macOS additionally needs the matching python-tk formula.
 # Runtime uses only Python stdlib, Tkinter and Pillow; no Rosetta/Win32 bindings.
+# Optional automatic-delivery diagnostic also uses Apple's local Vision framework
+# and a Swift helper built with Xcode Command Line Tools (not a pip dependency).
 Pillow>=10.4,<14
