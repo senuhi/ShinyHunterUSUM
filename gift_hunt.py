@@ -162,7 +162,16 @@ class GiftRunner:
         self.wait_stage('menu', HIDButtons.X)
         self.wait_stage('party_level', HIDButtons.A)
         # User must leave the Pokémon menu entry selected before saving.
-        self.wait_stage('party_name', HIDButtons.DPADUP)
+        if self.profile.language=='Japanese':
+            # Reuse the Mac diagnostic's tested one-member selection: slot two.
+            # Receipt approach/dialogue above remain the upstream per-route flow.
+            from production_setup import DEFAULT_PARTY_BEFORE
+            from summary_check import summary_buttons
+            for button,delay in summary_buttons(DEFAULT_PARTY_BEFORE)[-3:]:
+                self.click(getattr(HIDButtons,button));self.pause(delay)
+            self.wait_stage('party_name')
+        else:
+            self.wait_stage('party_name', HIDButtons.DPADUP)
 
     def reset(self):
         token, self.normal_token = self.normal_token, None
@@ -226,8 +235,8 @@ class GiftRunner:
 def run_gift(tab, language, target, dry_run, profile_path=None):
     runner = None
     try:
-        if language=='Japanese' and TARGETS[target]=='typenull_poni':
-            raise SafetyStop('日本語の本番対象はベベノム／タイプ：ヌル（エーテル）の2ルートです。')
+        if language=='Japanese' and TARGETS[target]=='typenull_aether':
+            raise SafetyStop('日本語の本番対象はベベノム／タイプ：ヌル（ポニ）の2ルートです。')
         profile = Profile(language, TARGETS[target], profile_path)
         runner = GiftRunner(tab, profile, dry_run)
         tab.msgbox.MsgAppend(runner.run())

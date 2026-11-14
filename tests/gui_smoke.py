@@ -26,14 +26,15 @@ def main(backend):
         assert app.General.backend.get()=='ChirunoMod'
         assert app.General.Tab.get()==1
         assert all(str(b['state'])=='disabled' for b in app.Recv.recvbtn[3:])
-        assert str(app.Recv.recvbtn[1]['state'])=='disabled' and not app.Recv.recvbtn[1].winfo_ismapped()
+        assert str(app.Recv.recvbtn[1]['state'])=='normal' and app.Recv.recvbtn[1].grid_info()
+        assert str(app.Recv.recvbtn[2]['state'])=='disabled' and not app.Recv.recvbtn[2].grid_info()
         assert app.winfo_height()>=app.winfo_reqheight()
         app.General.language.set('English');app.General.language_changed()
         app.General.backend.set(backend);app.General.backend_changed()
         app.General.Tab.set(1);app.Recv.recvvar.set(0)
         assert all(str(b['state'])=='normal' for b in app.Recv.recvbtn[3:])
-        assert str(app.Recv.recvbtn[1]['state'])=='normal'
-        app.Recv.recvvar.set(1);app.General.language.set('Japanese');app.General.language_changed()
+        assert all(str(app.Recv.recvbtn[i]['state'])=='normal' for i in (1,2))
+        app.Recv.recvvar.set(2);app.General.language.set('Japanese');app.General.language_changed()
         assert app.Recv.recvvar.get()==0
         app.General.language.set('English');app.General.language_changed()
         app.General.backend.set(backend);app.General.backend_changed()

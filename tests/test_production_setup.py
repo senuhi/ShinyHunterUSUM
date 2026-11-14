@@ -11,19 +11,22 @@ from gift_hunt import run_gift
 
 
 class ProductionPreparationTests(unittest.TestCase):
-    def test_two_routes_one_member_and_pending_receipt_steps(self):
+    def test_two_routes_one_member_and_upstream_receipt_flows(self):
         plan=preparation()
         self.assertEqual(DEFAULT_PARTY_BEFORE,1)
-        self.assertEqual(set(plan['targets']),{'poipole','typenull_aether'})
+        self.assertEqual(set(plan['targets']),{'poipole','typenull_poni'})
         self.assertEqual(plan['received_slot'],2)
         self.assertEqual(summary_buttons(1)[-3:],[('DPADRIGHT',1),('A',1),('A',3)])
         self.assertTrue(plan['dry_run_default'])
         self.assertFalse(plan['body_can_authorize_reset'])
-        for route in plan['targets'].values():self.assertIsNone(route['receipt_steps'])
-        with self.assertRaises(SafetyStop):summary_profile('typenull_poni')
+        self.assertEqual(plan['navigation'],'upstream_recv')
+        self.assertEqual(plan['targets']['typenull_poni']['approach'],{'x':1.0,'seconds':.1,'repeats':3})
+        self.assertEqual(plan['targets']['poipole']['start'],'facing_gift_npc_no_dialogue')
+        self.assertEqual(plan['targets']['typenull_poni']['start'],'left_of_event_trigger')
+        with self.assertRaises(SafetyStop):summary_profile('typenull_aether')
 
     def test_both_target_names_and_colon_variants_on_summary(self):
-        for target,label in [('poipole','ベベノム'),('typenull_aether','タイプ:ヌル')]:
+        for target,label in [('poipole','ベベノム'),('typenull_poni','タイプ:ヌル')]:
             config=load_config(summary_profile(target))
             images={'0':Image.new('RGB',(320,240),(129,242,74)),'1':Image.new('RGB',(400,240))}
             ocr=Mock();ocr.read.return_value=[{'text':s,'confidence':1} for s in (label,'現在の経験値','次のレベルまで')]
@@ -37,19 +40,19 @@ class ProductionPreparationTests(unittest.TestCase):
             Image.new('RGB',(400,240),'white').save(upper)
             Image.new('RGB',(320,240),(129,242,74)).save(lower)
             ocr=Mock();ocr.read.return_value=[{'text':s,'confidence':1} for s in ('タイプ：ヌル','現在の経験値','次のレベルまで')]
-            result=replay_summary('typenull_aether',upper,lower,ocr)
+            result=replay_summary('typenull_poni',upper,lower,ocr)
             self.assertEqual(result['verdict'],'normal')
             self.assertEqual(result['controller_packets'],0)
             self.assertFalse(result['reset_authorized'])
             self.assertIn('UNVERIFIED',result['calibration_status'])
             Image.new('RGB',(1200,720)).save(upper);ocr.reset_mock()
-            with self.assertRaises(SafetyStop):replay_summary('typenull_aether',upper,lower,ocr)
+            with self.assertRaises(SafetyStop):replay_summary('typenull_poni',upper,lower,ocr)
             ocr.read.assert_not_called()
 
-    def test_japanese_poni_hidden_scope_also_blocks_programmatic_runner(self):
+    def test_japanese_aether_hidden_scope_also_blocks_programmatic_runner(self):
         tab=Mock();tab.ir=None
         with patch('gift_hunt.GiftRunner') as runner:
-            run_gift(tab,'Japanese',1,True)
+            run_gift(tab,'Japanese',2,True)
         runner.assert_not_called()
         self.assertIn('2ルート',tab.msgbox.MsgAppend.call_args[0][0])
 

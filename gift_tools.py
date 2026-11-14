@@ -66,7 +66,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('prepare',help='Read-only two-route / one-member production plan')
     summary=commands.add_parser('summary-replay',help='Local Vision on native saved summary images; no network/input')
-    summary.add_argument('--target',choices=('poipole','typenull_aether'),required=True)
+    summary.add_argument('--target',choices=('poipole','typenull_poni'),required=True)
     summary.add_argument('--upper',required=True)
     summary.add_argument('--lower',required=True)
     summary.add_argument('--output',required=True)

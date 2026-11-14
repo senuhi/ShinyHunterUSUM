@@ -2,8 +2,8 @@
   "schema": 1,
   "language": "Japanese",
   "party_before": 1,
-  "start": "saved_npc_no_dialogue",
-  "navigation": "fixed_timed_buttons",
+  "start": "upstream_route_specific_saved_pre_receipt",
+  "navigation": "upstream_recv",
   "verdict_source": "summary_star",
   "body_can_authorize_reset": false,
   "dry_run_default": true,
@@ -11,14 +11,45 @@
     "poipole": {
       "name": "ベベノム",
       "summary_profile": "poipole-summary-ja.json",
-      "receipt_steps": null,
-      "status": "UNVERIFIED: awaiting the operator's pre-receipt save and native Chiruno frames"
+      "status": "UNVERIFIED: original Poipole flow retained; Japanese images need hardware validation",
+      "start": "facing_gift_npc_no_dialogue",
+      "approach": {
+        "x": 0.0,
+        "seconds": 0.1,
+        "repeats": 0
+      },
+      "receipt_flow": [
+        {
+          "stage": "dialogue_name",
+          "button": "A"
+        },
+        {
+          "stage": "party_added",
+          "button": "B"
+        }
+      ]
     },
-    "typenull_aether": {
+    "typenull_poni": {
       "name": "タイプ：ヌル",
-      "summary_profile": "typenull-aether-summary-ja.json",
-      "receipt_steps": null,
-      "status": "UNVERIFIED: awaiting Aether pre-receipt save; defer Poni gift before preparing the one-member party"
+      "summary_profile": "typenull-poni-summary-ja.json",
+      "status": "UNVERIFIED: original Poni flow retained; Japanese images and event-trigger start need hardware validation",
+      "start": "left_of_event_trigger",
+      "approach": {
+        "x": 1.0,
+        "seconds": 0.1,
+        "repeats": 3
+      },
+      "receipt_flow": [
+        {
+          "stage": "dialogue_name",
+          "button": "A"
+        },
+        {
+          "stage": "dialogue_end",
+          "button": "B"
+        }
+      ]
     }
-  }
+  },
+  "upstream_source": "u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d: Recv.findrecv/nav_dialogue/check_summary"
 }

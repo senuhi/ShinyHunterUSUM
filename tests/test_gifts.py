@@ -213,6 +213,33 @@ class SafetyTests(unittest.TestCase):
                 self.assertEqual('dialogue_end' in stages,target!='poipole')
                 self.assert_no_reset(runner)
 
+    def test_poipole_and_poni_receipt_prefix_matches_preserved_upstream(self):
+        from Recv import Recv
+        for index,target in ((0,'poipole'),(1,'typenull_poni')):
+            with self.subTest(target=target),tempfile.TemporaryDirectory() as td:
+                legacy=SimpleNamespace(cpad=Mock(),wait_for=Mock(return_value=1),
+                    check_summary=Mock(return_value=(0,None)),lab=[object(),object()],ty=object(),be=object())
+                legacy.nav_dialogue=lambda poke,game:Recv.nav_dialogue(legacy,poke,game)
+                with patch('Recv.time.sleep') as sleeper:Recv.findrecv(legacy,index,1)
+                legacy_buttons=[call.kwargs['button'] for call in legacy.wait_for.call_args_list]
+                profile=fixture(Path(td),target=target);runner=runner_for(Path(td),profile,False)
+                runner.wait_stage=Mock();runner.click=Mock();runner.receive()
+                self.assertEqual([c.args[1] for c in runner.wait_stage.call_args_list[:2]],legacy_buttons)
+                self.assertEqual([c.args[0] for c in runner.wait_stage.call_args_list[:2]],
+                    ['dialogue_name','party_added' if index==0 else 'dialogue_end'])
+                self.assertEqual([c.args[0] for c in runner.click.call_args_list],
+                    [HIDButtons.B]*10+[HIDButtons.DPADRIGHT,HIDButtons.A,HIDButtons.A])
+                self.assertEqual(runner.wait_stage.call_args_list[-1].args,('party_name',))
+                if index==1:
+                    self.assertEqual(legacy.cpad.call_args_list,[unittest.mock.call(1.0,0.0),unittest.mock.call(0.0,0.0)]*3)
+                    self.assertEqual(sleeper.call_args_list,[unittest.mock.call(.1)]*3)
+                    self.assertEqual(runner.tab.ir.circle_pad_set.call_count,3)
+                    self.assertEqual(runner.tab.ir.circle_pad_neutral.call_count,3)
+                    self.assertEqual(profile.data['approach'],{'x':1.0,'seconds':.1,'repeats':3})
+                else:
+                    legacy.cpad.assert_not_called();runner.tab.ir.circle_pad_set.assert_not_called()
+                self.assert_no_reset(runner)
+
     def test_shiny_candidate_stops_without_startup_reset(self):
         runner=runner_for(self.folder,self.profile,False)
         self.profile.require_ready=Mock()

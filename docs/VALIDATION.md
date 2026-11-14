@@ -3,6 +3,42 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest scope: Poipole + Type: Null Poni using upstream reception flow
+
+The operator changed Type: Null production from Aether to Poni to avoid preparing
+full storage, and requested upstream-compatible starting positions and logic.
+Current Japanese targets are Poipole and Poni; Aether is hidden/rejected for this
+production scope. English Aether and the original Recv implementations remain.
+The default party remains one member and the gift is the second member.
+
+The preserved upstream README specifies facing the gift NPC for Poipole and
+standing to the left of the event trigger for Poni. The Poni route in
+`Recv.findrecv` presses right for 0.1 seconds, neutralizes, and repeats three
+times, then advances the name dialogue with A. `nav_dialogue` uses B for the
+Poipole party-added message and B for Poni's end-of-dialogue message.
+`GiftRunner.receive` retains that per-target movement and A/B branch structure;
+it is not replaced with the earlier Pikachu diagnostic's A-count or new OCR
+navigation. Japanese names/dialogue/menu templates still need calibration.
+
+Japanese Summary selection now explicitly uses the previously tested Mac
+one-member path (Right, A, A) after the party-list anchor, then checks the target
+name without blindly cycling other party members. English retains its existing
+selection path. The normal-only reset, red-star veto, freshness and validation
+gates remain. Old profile templates alone do not establish the new route's
+physical readiness; no validation receipt was issued.
+
+94 offline tests passed. A new regression invokes the preserved `Recv.findrecv`
+and `nav_dialogue` methods with mocked devices and compares their receipt-prefix
+buttons and Poni movement against the Mac runner. It also checks Japanese
+second-slot Summary selection and absence of reset. Native GUI loopback checks
+passed for both Chiruno and NTR, including Japanese Poni selection, Japanese
+Aether hiding and retained English options. No physical input or network
+connection to the 3DS occurred during this change. Poni event-boundary distance,
+native Japanese assets and both target routes still await hardware validation.
+
+The current preparation guide replaces the earlier Aether/full-storage advice:
+[PRODUCTION_PREP_JA.md](PRODUCTION_PREP_JA.md). Earlier sections below are history.
+
 ## Latest preparation: two Japanese routes, one party member, red-star guard
 
 The operator narrowed production to Poipole and Type: Null Aether, starting

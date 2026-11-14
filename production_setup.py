@@ -4,13 +4,13 @@ from pathlib import Path
 from gift_recognition import SafetyStop
 
 ROOT=Path(__file__).parent
-PRODUCTION_TARGETS=('poipole','typenull_aether')
+PRODUCTION_TARGETS=('poipole','typenull_poni')
 DEFAULT_PARTY_BEFORE=1
-SUMMARY_PROFILES={'poipole':'poipole-summary-ja.json','typenull_aether':'typenull-aether-summary-ja.json'}
+SUMMARY_PROFILES={'poipole':'poipole-summary-ja.json','typenull_poni':'typenull-poni-summary-ja.json'}
 
 
 def summary_profile(target):
-    if target not in PRODUCTION_TARGETS:raise SafetyStop('本番対象はベベノムとエーテルのヌルです。')
+    if target not in PRODUCTION_TARGETS:raise SafetyStop('本番対象はベベノムとポニのヌルです。')
     return ROOT/'profiles'/SUMMARY_PROFILES[target]
 
 
@@ -19,6 +19,7 @@ def preparation():
     if (config['schema']!=1 or config['language']!='Japanese' or
         type(config['party_before']) is not int or config['party_before']!=DEFAULT_PARTY_BEFORE or
         set(config['targets'])!=set(PRODUCTION_TARGETS) or
+        config['navigation']!='upstream_recv' or
         config['verdict_source']!='summary_star' or config['body_can_authorize_reset'] is not False or
         config['dry_run_default'] is not True):
         raise SafetyStop('本番準備の対象・手持ち数・安全設定が不正です。')
