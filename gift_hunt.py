@@ -226,6 +226,8 @@ class GiftRunner:
 def run_gift(tab, language, target, dry_run, profile_path=None):
     runner = None
     try:
+        if language=='Japanese' and TARGETS[target]=='typenull_poni':
+            raise SafetyStop('日本語の本番対象はベベノム／タイプ：ヌル（エーテル）の2ルートです。')
         profile = Profile(language, TARGETS[target], profile_path)
         runner = GiftRunner(tab, profile, dry_run)
         tab.msgbox.MsgAppend(runner.run())

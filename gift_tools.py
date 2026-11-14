@@ -4,6 +4,7 @@ import hashlib
 import json
 import socket
 import time
+import sys
 from pathlib import Path
 from PIL import Image
 from gift_recognition import Profile, TARGETS, SafetyStop, roi, colour_verdict
@@ -63,6 +64,12 @@ def capture(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
+    commands.add_parser('prepare',help='Read-only two-route / one-member production plan')
+    summary=commands.add_parser('summary-replay',help='Local Vision on native saved summary images; no network/input')
+    summary.add_argument('--target',choices=('poipole','typenull_aether'),required=True)
+    summary.add_argument('--upper',required=True)
+    summary.add_argument('--lower',required=True)
+    summary.add_argument('--output',required=True)
     cap = commands.add_parser('capture', help='Direct video capture; no controller input')
     cap.add_argument('--backend', choices=BACKENDS, default='ChirunoMod')
     cap.add_argument('--local', required=True, help='Mac IPv4:stream-port')
@@ -86,6 +93,21 @@ def main():
             sub.add_argument('--hardware-verified', action='store_true', required=True,
                              help='Operator attests the hardware checklist has actually passed')
     args = parser.parse_args()
+    if args.command=='prepare':
+        from production_setup import preparation
+        print(json.dumps(preparation(),ensure_ascii=False,indent=2));return
+    if args.command=='summary-replay':
+        from summary_check import replay_summary,native_summary_images
+        from mac_ocr import MacOCR
+        images=native_summary_images(args.upper,args.lower)
+        ocr=MacOCR(Path(sys.prefix)/'ocr-cache')
+        try:
+            ocr.read(images['1'],timeout=65)
+            result=replay_summary(args.target,args.upper,args.lower,ocr)
+            Path(args.output).write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+            print(json.dumps(result,ensure_ascii=False,indent=2))
+        finally:ocr.close()
+        return
     if args.command == 'capture':
         if not 0 < args.seconds <= 3600 or not .05 <= args.interval <= 60:
             parser.error('Invalid capture duration/interval')

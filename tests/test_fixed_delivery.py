@@ -57,7 +57,7 @@ def execute(engine,stop=False,checker=None):
     controller=Controller(engine.store);delays=[]
     with patch('fixed_delivery.MacOCR',return_value=OCR(engine.store)),patch('fixed_delivery.LumaInputServer',return_value=controller),patch.object(FixedDelivery,'wait',side_effect=lambda seconds,label:delays.append(seconds)):
         with patch('fixed_delivery.check_summary',side_effect=checker) if checker else patch('fixed_delivery.check_summary',wraps=check_summary):
-            runner=FixedDelivery(engine);runner.start(True,True,True,stop_at_summary=stop);engine.player.join(8)
+            runner=FixedDelivery(engine);runner.start(True,True,True,party_before=4,stop_at_summary=stop);engine.player.join(8)
     return controller,delays
 
 
@@ -153,7 +153,8 @@ class SummaryTests(unittest.TestCase):
         config=load_config();ocr=Mock()
         ocr.read.return_value=[{'text':s,'confidence':1} for s in ('ピカチュウ','おや','IDNo')]
         for label,colour in (('normal',config['colour']['normal']),('shiny',config['colour']['shiny']),('unknown',[0,0,0])):
-            images={str(screen):Image.new('RGB',((320 if screen==0 else 400),240),tuple(round(c) for c in colour)) for screen in (0,1)}
+            images={str(screen):Image.new('RGB',((320 if screen==0 else 400),240),(129,242,74)) for screen in (0,1)}
+            ImageDraw.Draw(images['0']).rectangle((59,184,66,191),fill=tuple(round(c) for c in colour))
             self.assertEqual(check_summary(images,ocr,config)['verdict'],label)
 
     def test_colour_without_summary_identity_or_context_is_unknown(self):

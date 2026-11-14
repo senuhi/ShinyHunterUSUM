@@ -131,14 +131,18 @@ class Recv(TabBase):
         labels = ('ベベノム', 'ヌル・ポニ', 'ヌル・エーテル') if japanese else ('Poipole', 'TN-Poni', 'TN-Aether')
         for button, text in zip(self.recvbtn[:3], labels):
             button.config(text=text, width=11)
-        if japanese and self.recvvar.get() > 2:
+        if japanese and self.recvvar.get() not in (0, 2):
             self.recvvar.set(0)
         for button in self.recvbtn[3:]:
             button.config(state='disabled' if japanese else 'normal')
         if japanese or self.recvvar.get() <= 2:
             self.boostvar.set(0)
         self.boostbtn.config(state='disabled' if japanese or self.recvvar.get() <= 2 else 'normal')
-        # Japanese support is deliberately limited to the three gift routes.
+        # Operator scope: Japanese Poipole and Aether only; keep English Poni.
+        self.recvbtn[1].config(state='disabled' if japanese else 'normal')
+        if japanese:self.recvbtn[1].grid_remove()
+        else:self.recvbtn[1].grid()
+        self.recvbtn[2].grid_configure(column=1 if japanese else 2)
         for index in (0, 2):
             self.General.TabButton[index].config(state='disabled' if japanese else 'normal')
         if japanese:

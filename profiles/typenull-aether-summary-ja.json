@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "language": "Japanese",
+  "target": "タイプ：ヌル",
+  "calibration_status": "UNVERIFIED: summary star ROI/RGB reused from upstream; supplied body images are a different scene and are not summary calibration",
+  "samples": 3,
+  "name_threshold": 0.9,
+  "context_threshold": 0.8,
+  "colour": {
+    "screen": 0,
+    "box": [
+      59,
+      184,
+      67,
+      192
+    ],
+    "normal": [
+      128.86,
+      242.03,
+      73.97
+    ],
+    "shiny": [
+      174.08,
+      126.38,
+      40.03
+    ],
+    "max_distance": 0.15,
+    "min_margin": 0.5,
+    "max_stddev": 80,
+    "star_search_box": [
+      40,
+      176,
+      85,
+      202
+    ]
+  },
+  "route": "typenull_aether"
+}

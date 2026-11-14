@@ -15,7 +15,7 @@ CONFIG = Path(__file__).parent / 'profiles' / 'pikachu-diagnostic-ja.json'
 
 def load_config(path=CONFIG):
     raw=Path(path).read_bytes();config=json.loads(raw)
-    if config.get('schema')!=1 or config.get('language')!='Japanese' or config.get('target')!='ピカチュウ':
+    if config.get('schema')!=1 or config.get('language')!='Japanese' or config.get('target') not in ('ピカチュウ','ベベノム','タイプ：ヌル'):
         raise SafetyStop('情報画面の診断設定が不正です。')
     if config['colour']['screen'] not in (0,1):raise SafetyStop('色判定の画面が不正です。')
     if config['samples']!=3 or config['name_threshold']!=.9 or config['context_threshold']!=.8:
@@ -27,7 +27,7 @@ def load_config(path=CONFIG):
 
 def check_summary(images,ocr,config):
     rows={key:ocr.read(image) for key,image in images.items()}
-    name=any(config['target'] in normalized(row['text']) and row['confidence']>=config['name_threshold']
+    name=any(normalized(config['target']) in normalized(row['text']) and row['confidence']>=config['name_threshold']
              for values in rows.values() for row in values)
     text=' '.join(normalized(row['text']) for values in rows.values() for row in values
                   if row['confidence']>=config['context_threshold'])
@@ -39,6 +39,24 @@ def check_summary(images,ocr,config):
     result.update(name_matched=name,context=anchors,rows=rows)
     if not name or len(anchors)<2:result['verdict']='unknown'
     return result
+
+
+def native_summary_images(upper,lower):
+    images={}
+    for key,path,size in (('0',lower,(320,240)),('1',upper,(400,240))):
+        with Image.open(path) as image:
+            if image.size!=size:raise SafetyStop('情報画面の原寸PNGが必要です（下320×240、上400×240）。')
+            images[key]=image.convert('RGB')
+    return images
+
+
+def replay_summary(target,upper,lower,ocr):
+    """Read-only native image replay. Screenshots of other scenes fail closed."""
+    from production_setup import summary_profile
+    config=load_config(summary_profile(target));images=native_summary_images(upper,lower)
+    result=check_summary(images,ocr,config)
+    return dict(result,target=target,profile_sha256=config['digest'],
+                calibration_status=config['calibration_status'],controller_packets=0,reset_authorized=False)
 
 
 def summary_buttons(party_before):

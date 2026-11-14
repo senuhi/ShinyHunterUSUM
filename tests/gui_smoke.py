@@ -26,11 +26,17 @@ def main(backend):
         assert app.General.backend.get()=='ChirunoMod'
         assert app.General.Tab.get()==1
         assert all(str(b['state'])=='disabled' for b in app.Recv.recvbtn[3:])
+        assert str(app.Recv.recvbtn[1]['state'])=='disabled' and not app.Recv.recvbtn[1].winfo_ismapped()
         assert app.winfo_height()>=app.winfo_reqheight()
         app.General.language.set('English');app.General.language_changed()
         app.General.backend.set(backend);app.General.backend_changed()
         app.General.Tab.set(1);app.Recv.recvvar.set(0)
         assert all(str(b['state'])=='normal' for b in app.Recv.recvbtn[3:])
+        assert str(app.Recv.recvbtn[1]['state'])=='normal'
+        app.Recv.recvvar.set(1);app.General.language.set('Japanese');app.General.language_changed()
+        assert app.Recv.recvvar.get()==0
+        app.General.language.set('English');app.General.language_changed()
+        app.General.backend.set(backend);app.General.backend_changed()
         app.General.inputport.set('4959')
         app.General.profilevar.set('日本語=profile.json')
         index=app.General.settingGetInd();app.GUI2data(index);app.General.WriteSetting(app.General.data)

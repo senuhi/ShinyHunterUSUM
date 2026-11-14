@@ -10,6 +10,7 @@ from PIL import ImageTk
 from ntr_transport import endpoint
 from rehearsal import Rehearsal, BUTTONS, DEFAULT_BOXES
 from video_stream import console_endpoint
+from production_setup import DEFAULT_PARTY_BEFORE
 
 
 class RehearsalWindow(tk.Toplevel):
@@ -26,7 +27,7 @@ class RehearsalWindow(tk.Toplevel):
         self.console = tk.StringVar(value=app.General.IPDS.Entry.get())
         self.input_port = tk.StringVar(value=app.General.inputport.get())
         self.passive = tk.BooleanVar(value=True); self.saved = tk.BooleanVar(value=False)
-        self.party_before=tk.IntVar(value=4);self.stop_at_summary=tk.BooleanVar(value=True)
+        self.party_before=tk.IntVar(value=DEFAULT_PARTY_BEFORE);self.stop_at_summary=tk.BooleanVar(value=True)
         self.received = tk.BooleanVar(value=False); self.cycles = tk.IntVar(value=1)
         self.button = tk.StringVar(value='A'); self.status_text = tk.StringVar(value='未接続。受信開始はボタン入力を送りません。')
         self.stats = tk.StringVar(value='上 0枚 / 下 0枚 · 入力 0 · リセット 0')
@@ -272,7 +273,8 @@ class RehearsalWindow(tk.Toplevel):
             elif kind=='ocr':self.scores.set('読取: '+value[:120])
             elif kind=='summary':
                 names={'normal':'通常色候補','shiny':'色違い候補','unknown':'判定不能'}
-                self.scores.set(f'情報画面: {names[value["verdict"]]} · 通常距離 {value["normal_distance"]:.3f} / 色違い距離 {value["shiny_distance"]:.3f} · 目印 {len(value["context"])}個')
+                marker=' · 赤星候補あり' if value.get('star_evidence',{}).get('candidate') else ''
+                self.scores.set(f'情報画面: {names[value["verdict"]]} · 通常距離 {value["normal_distance"]:.3f} / 色違い距離 {value["shiny_distance"]:.3f} · 目印 {len(value["context"])}個'+marker)
         if self.engine is not None:
             with self.engine.lock:latest=dict(self.engine.latest);counts=dict(self.engine.counts)
             for s,image in latest.items():

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "language": "Japanese",
+  "party_before": 1,
+  "start": "saved_npc_no_dialogue",
+  "navigation": "fixed_timed_buttons",
+  "verdict_source": "summary_star",
+  "body_can_authorize_reset": false,
+  "dry_run_default": true,
+  "targets": {
+    "poipole": {
+      "name": "ベベノム",
+      "summary_profile": "poipole-summary-ja.json",
+      "receipt_steps": null,
+      "status": "UNVERIFIED: awaiting the operator's pre-receipt save and native Chiruno frames"
+    },
+    "typenull_aether": {
+      "name": "タイプ：ヌル",
+      "summary_profile": "typenull-aether-summary-ja.json",
+      "receipt_steps": null,
+      "status": "UNVERIFIED: awaiting Aether pre-receipt save; defer Poni gift before preparing the one-member party"
+    }
+  }
+}

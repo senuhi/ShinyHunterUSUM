@@ -14,9 +14,10 @@ from mac_ocr import MacOCR
 from tppflush import LumaInputServer
 from summary_check import check_summary,load_config,summary_buttons
 from rehearsal import image_score
+from production_setup import DEFAULT_PARTY_BEFORE
 
 class FixedDelivery(AutomaticDelivery):
-    def start(self,saved=False,approved=False,live=False,interval=3.0,party_before=4,stop_at_summary=True):
+    def start(self,saved=False,approved=False,live=False,interval=3.0,party_before=DEFAULT_PARTY_BEFORE,stop_at_summary=True):
         sequence=summary_buttons(party_before)
         if type(stop_at_summary) is not bool:raise SafetyStop('情報画面で停止する設定が不正です。')
         if not 1<=interval<=5:raise SafetyStop('会話間隔は1〜5秒です。')

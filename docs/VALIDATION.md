@@ -3,6 +3,50 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest preparation: two Japanese routes, one party member, red-star guard
+
+The operator narrowed production to Poipole and Type: Null Aether, starting
+with one party member. Japanese Poni is hidden/rejected without deleting English
+Poni functionality. The received slot is two, so its fixed selection is Right,
+A, A from the first party cursor. Diagnostic defaults now use one party member;
+the earlier four-member tests remain supported. Fixed receipt sequences for the
+two actual gifts remain explicitly pending native pre-receipt-save validation.
+
+Two separate summary profiles and a read-only production-preparation manifest
+were added. A local native-pair replay uses the shared summary checks for either
+Japanese name, including Type: Null colon variants. Replay always reports zero
+controller packets and reset_authorized=false; it cannot grant a live receipt.
+
+Four operator-supplied registration screenshots were measured as body-colour
+references only. Type: Null yellow-excess (R+G)/2-B in sampled head/tail regions
+was -4.76/-5.62 for normal versus 32.53/67.82 for shiny. These are descriptive
+values from those images, not independent classification accuracy or portable
+thresholds. Model motion, rescaling and video/JPEG compression remain uncalibrated.
+No body-colour reset path was added. Primary production evidence stays Summary.
+
+The additional 819×617 YouTube Summary screenshot contains a red marker at native
+analysis coordinates [47,188,53,194]. This differs from the upstream USUM patch.
+The new optional marker-band guard searches [40,176,85,202]: compact red marks
+override a normal-colour patch as a shiny candidate; ambiguous red pixels force
+unknown. Both prohibit reset. This is enabled in Japanese/diagnostic profiles;
+English profiles retain their existing behaviour. Changing profiles invalidates
+older validation fingerprints as designed. The supplied red-star screenshot was
+detected offline; the earlier native normal Pikachu retained normal with zero
+red pixels. Raw reference images/measurements remain private and untracked.
+
+93 unit/loopback tests passed, including both star positions with an otherwise
+normal green patch, partial-marker rejection, wrong-name rejection, both target
+profiles and the one-member preparation contract. Native loopback GUI checks
+passed for Japanese target restrictions / English Poni retention and English
+passive recognition on both Chiruno and NTR backends. New one-member fixed
+navigation was tested on synthetic screens, not a physical target gift.
+Actual two-route receipt timings, native shiny evidence, final completion
+bookkeeping and unattended stability are still pending.
+
+The operator confirmed awareness of the special Poni deferral condition and is
+preparing the Aether save. No real-console input, reset, connection or save was
+performed while preparing these changes. See [PRODUCTION_PREP_JA.md](PRODUCTION_PREP_JA.md).
+
 ## Latest physical result: Summary-normal reset and saved-location return
 
 The operator confirmed the complete sequence worked. Private run

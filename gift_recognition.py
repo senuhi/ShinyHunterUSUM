@@ -44,6 +44,33 @@ def template_score(image, box, template, vertical=0):
     return best
 
 
+def red_star_evidence(image, box):
+    """Conservative marker-band veto, including the two upstream UI layouts.
+
+    Tiny compressed glyphs cannot establish accuracy from shape alone. A compact
+    red mark is a shiny candidate; any other red evidence makes NORMAL unsafe.
+    """
+    patch=roi(image,box).convert('RGB');points=set()
+    for y in range(patch.height):
+        for x in range(patch.width):
+            r,g,b=patch.getpixel((x,y))
+            if r>=100 and r-g>=35 and r-b>=30:points.add((x,y))
+    remaining=set(points);components=[];candidate=False
+    while remaining:
+        pending=[remaining.pop()];component=[]
+        while pending:
+            x,y=pending.pop();component.append((x,y))
+            for dx in (-1,0,1):
+                for dy in (-1,0,1):
+                    p=(x+dx,y+dy)
+                    if p in remaining:remaining.remove(p);pending.append(p)
+        xs,ys=zip(*component);w=max(xs)-min(xs)+1;h=max(ys)-min(ys)+1
+        compact=4<=w<=12 and 4<=h<=12 and 6<=len(component)<=100 and max(w,h)<=2*min(w,h)
+        candidate=candidate or compact
+        components.append({'pixels':len(component),'box':[box[0]+min(xs),box[1]+min(ys),box[0]+max(xs)+1,box[1]+max(ys)+1],'candidate':compact})
+    return {'red_pixels':len(points),'candidate':candidate,'components':components}
+
+
 def colour_verdict(image, config):
     patch = roi(image, config['box']).convert('RGB')
     mean = ImageStat.Stat(patch).mean
@@ -62,8 +89,15 @@ def colour_verdict(image, config):
     result = 'unknown'
     if min(normal, shiny) <= config['max_distance'] and margin >= config['min_margin'] and stddev <= config['max_stddev']:
         result = 'normal' if normal < shiny else 'shiny'
-    return dict(verdict=result, mean=mean, normal_distance=normal,
-                shiny_distance=shiny, margin=margin, stddev=stddev)
+    details=dict(verdict=result, mean=mean, normal_distance=normal,
+                 shiny_distance=shiny, margin=margin, stddev=stddev)
+    if 'star_search_box' in config:
+        star=red_star_evidence(image,config['star_search_box']);details['star_evidence']=star
+        if star['candidate']:
+            details.update(verdict='shiny',reason='red_star_candidate_overrides_patch')
+        elif star['red_pixels']:
+            details.update(verdict='unknown',reason='ambiguous_red_marker_cannot_authorize_reset')
+    return details
 
 
 class Profile:

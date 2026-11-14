@@ -35,14 +35,15 @@ def main():
         app.title('模擬テスト · 実機未接続');window.title('模擬自動テスト · 実機未接続')
         assert not window.advanced.get() and not window.record_frame.winfo_ismapped()
         assert window.auto_frame.winfo_ismapped() and window.engine is None
-        assert window.stop_at_summary.get() is True
+        assert window.stop_at_summary.get() is True and window.party_before.get()==1
         assert window.winfo_reqheight()+45 < window.winfo_screenheight()
         server=socket.socket();server.bind(('127.0.0.1',0));server.listen();server.settimeout(3)
         inputs=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);inputs.bind(('127.0.0.1',0));inputs.settimeout(.1)
         halted=threading.Event();lock=threading.Lock();state=[0];downs=[];errors=[]
         font=ImageFont.truetype('/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc',18)
         assets=ROOT/'templates/ja/Diagnostics'
-        nav=summary_buttons(4);summary_phase=3+len(nav)
+        party_before=1 if '--party-one' in sys.argv[1:] else 4
+        nav=summary_buttons(party_before);summary_phase=3+len(nav)
         only_summary='--summary-only' in sys.argv[1:]
         expected=[int(HIDButtons.A)]*3+[int(getattr(HIDButtons,b)) for b,_ in nav]
         if not only_summary:expected += [int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
@@ -118,7 +119,7 @@ def main():
         producer.start();consumer.start()
         window.local.set('127.0.0.1:8001');window.console.set(f'127.0.0.1:{server.getsockname()[1]}')
         window.input_port.set(str(inputs.getsockname()[1]));window.saved.set(True)
-        window.stop_at_summary.set(only_summary);window.party_before.set(4)
+        window.stop_at_summary.set(only_summary);window.party_before.set(party_before)
         window.connect_button.invoke()
         phase=['receive'];deadline=time.monotonic()+70
         app.report_callback_exception=lambda *args:errors.append(('GUI',str(args)))
