@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from PIL import Image, ImageDraw
-from automatic_delivery import AutomaticDelivery, recognize, screen_stage, corroborates_receipt, dialogue_visible
+from automatic_delivery import AutomaticDelivery, recognize, screen_stage, corroborates_receipt, dialogue_visible, receipt_ocr_image
 from gift_recognition import SafetyStop
 from rehearsal import Rehearsal, DEFAULT_BOXES
 from tppflush import HIDButtons
@@ -57,6 +57,34 @@ def fake_stage(image,stage):
 
 
 class AutomaticTests(unittest.TestCase):
+    def test_receipt_preprocessing_keeps_foreground_for_both_polarities(self):
+        for background,foreground in (('black','white'),('white','black')):
+            image=Image.new('RGB',(40,20),background)
+            ImageDraw.Draw(image).rectangle((8,5,10,7),fill=foreground)
+            processed=receipt_ocr_image(image)
+            self.assertEqual(processed.getpixel((0,0)),255)
+            self.assertEqual(processed.getpixel((9,6)),0)
+
+    def test_receipt_resume_requires_explicit_mode_and_permission(self):
+        with tempfile.TemporaryDirectory() as td:
+            engine=setup(td);engine.report.update(automatic_dry_run_verified=True,automatic_ready_state='received')
+            runner=AutomaticDelivery(engine)
+            with self.assertRaises(SafetyStop):runner.start(True,True,True)
+            with self.assertRaises(SafetyStop):runner.start(False,True,True,True)
+
+    def test_receipt_resume_sends_only_reset_start_continue(self):
+        with tempfile.TemporaryDirectory() as td:
+            engine=setup(td);engine.store.state=2
+            engine.report.update(automatic_dry_run_verified=True,automatic_ready_state='received')
+            fake=GameController(engine);fake.step=2
+            with patch('automatic_delivery.MacOCR',side_effect=lambda _:GameOCR(engine)),patch('automatic_delivery.screen_stage',side_effect=fake_stage),patch('automatic_delivery.LumaInputServer',return_value=fake):
+                runner=AutomaticDelivery(engine);runner.start(True,True,True,True);engine.player.join(6)
+            self.assertFalse(engine.player.is_alive())
+            self.assertEqual(fake.down,[HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,HIDButtons.START,HIDButtons.A])
+            self.assertEqual(engine.report['controller_packets'],9)
+            self.assertEqual(engine.report['completed_cycles'],0)
+            self.assertEqual(engine.report['completed_recoveries'],1)
+
     def test_dialogue_box_is_not_treated_as_an_empty_field(self):
         from PIL import ImageDraw
         image=Image.new('RGB',(400,240),'#305040')

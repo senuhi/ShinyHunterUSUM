@@ -3,6 +3,29 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: real Pikachu receipt reached; diacritic fix and receipt recovery
+
+The operator's application advanced the real Japanese Pikachu delivery using
+three A presses (9 datagrams). The operator and screenshot confirm the received
+message. No reset was sent: corrected OCR read Pikachu at score 1, but uncorrected
+OCR confused the small diacritic and scored 0.3, so corroboration failed and the
+application stopped safely. A complete physical cycle is still unverified.
+
+Receipt corroboration now binarizes and normalizes dark/light polarity before
+uncorrected OCR. The actual saved native receipt frame passed twice at unchanged
+primary/backup thresholds (1 / 0.5), without substituting Pokemon names or
+lowering confidence limits. Personal screenshots remain private.
+
+The GUI can explicitly resume from a recognized received message: a new in-app
+approval authorizes reset once, START and continue A only. It sends no further
+receipt A inputs. Successful recovery increments completed_recoveries, not a
+full delivery-cycle counter, and requires a new passive check before another
+run. All 76 unit/loopback tests pass. Native GUI + Vision + actual local TCP/UDP
+passed both a synthetic full cycle with dark receipt text (15 datagrams) and a
+synthetic received-state recovery (9 datagrams). Those do not establish that
+the current real console has reset/recovered yet; the operator's real test is
+pending. The running old application needs a restart to load this change.
+
 ## Latest: bounded read-only recovery of the first 2x50 JPEG
 
 The first application connection after console startup failed on the same

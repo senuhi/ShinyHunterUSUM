@@ -6,7 +6,7 @@ import threading
 import time
 import unicodedata
 from pathlib import Path
-from PIL import Image, ImageChops, ImageStat
+from PIL import Image, ImageChops, ImageStat, ImageOps
 from gift_recognition import SafetyStop, template_score
 from mac_ocr import MacOCR
 from rehearsal import image_score
@@ -70,6 +70,13 @@ def corroborates_receipt(rows, expected):
                 and normalized(raw)==expected)
 
 
+def receipt_ocr_image(image):
+    """Keep small diacritics visible, including the dark receipt message box."""
+    gray=image.convert('L')
+    binary=gray.point(lambda value:255 if value>140 else 0)
+    return ImageOps.invert(binary) if ImageStat.Stat(gray).median[0]<128 else binary
+
+
 def field_baseline(engine):
     """Use the passive field screenshot already recorded, never game data edits."""
     candidates=[]
@@ -100,12 +107,18 @@ class AutomaticDelivery:
         self.engine=engine;self.ocr=None;self.controller=None;self.actions=0;self.reset_sent=False
         self.baseline=field_baseline(engine)
 
-    def start(self,saved=False,approved=False,live=False):
+    def start(self,saved=False,approved=False,live=False,resume_received=False):
         if self.engine.playing:raise SafetyStop('別の試験が動作中です。')
         if live and (not saved or not approved):raise SafetyStop('受取前のセーブと今回の実行許可が必要です。')
         if live and not self.engine.report.get('automatic_dry_run_verified'):
             raise SafetyStop('先に「認識確認（送信0）」を完了してください。')
         if live and self.baseline is None:raise SafetyStop('開始位置の基準画像がありません。フィールド画面から認識確認を行ってください。')
+        ready=self.engine.report.get('automatic_ready_state')
+        if live and ready=='received' and not resume_received:
+            raise SafetyStop('受取済みです。「受取後の復帰テスト」を選んでください。')
+        if live and resume_received and ready!='received':
+            raise SafetyStop('受取済み画面の認識確認が必要です。')
+        self.resume_received=bool(resume_received)
         self.engine.healthy()
         self.engine.player=threading.Thread(target=self.run,args=(live,),daemon=True)
         self.engine.player.start()
@@ -132,7 +145,7 @@ class AutomaticDelivery:
             if time.monotonic()-frames['1'].received>2:
                 stable=0;continue
             if decision=='received':
-                raw_rows=self.ocr.read(crop,correction=False)
+                raw_rows=self.ocr.read(receipt_ocr_image(crop),correction=False)
                 corroborated=corroborates_receipt(raw_rows,text)
                 self.engine.event('automatic_receipt_corroboration',rows=raw_rows,matched=corroborated)
                 if not corroborated:decision='unknown'
@@ -169,7 +182,7 @@ class AutomaticDelivery:
             current=self.engine.healthy()['1']
             rows=self.ocr.read(current.image.crop(DIALOGUE_BOX))
             decision,text=recognize(rows,'receive')
-            raw=self.ocr.read(current.image.crop(DIALOGUE_BOX),correction=False)
+            raw=self.ocr.read(receipt_ocr_image(current.image.crop(DIALOGUE_BOX)),correction=False)
             self.engine.event('automatic_final_reset_check',rows=rows,raw_rows=raw,decision=decision)
             if decision!='received' or not corroborates_receipt(raw,text) or time.monotonic()-current.received>2:
                 raise SafetyStop('送信直前の受取完了確認が不明です。リセットしません。')
@@ -197,8 +210,9 @@ class AutomaticDelivery:
     def run(self,live=False):
         engine=self.engine
         self.live=live
+        resume_received=getattr(self,'resume_received',False)
         try:
-            engine.report.update(live=live,automatic_delivery=True,shiny_verified=False)
+            engine.report.update(live=live,automatic_delivery=True,shiny_verified=False,resume_received=resume_received)
             engine.status('日本語OCRを準備中。3DSへの入力はまだ送りません。')
             self.ocr=MacOCR(Path(sys.prefix)/'ocr-cache')
             # Initial framework/model preparation is passive. Its result NEVER
@@ -210,13 +224,15 @@ class AutomaticDelivery:
                 engine.status('日本語の受取会話を確認中。読めない画面は操作しません。')
                 decision,text,image=self.observe('receive',since,previous)
                 if not live:
-                    engine.report['automatic_dry_run_verified']=decision in ('field','dialogue')
+                    engine.report['automatic_dry_run_verified']=decision in ('field','dialogue','received')
+                    engine.report['automatic_ready_state']=decision
                     engine.event('automatic_dry_run',next_action='RESET' if decision=='received' else 'A',controller_packets=0)
-                    engine.status('認識確認完了（送信0）。'+('すでに受取済みなので、自動テストを開始しません。' if decision=='received' else '自動テストを開始できます。'))
+                    engine.status('認識確認完了（送信0）。'+('受取済みです。「受取後の復帰テスト」で続けられます。' if decision=='received' else '自動テストを開始できます。'))
                     return
                 if decision=='received':
                     engine.status('ピカチュウ受取完了を複数の新しい映像で確認。リセットを1回送信します。')
                     self.send('RESET',image,DIALOGUE_BOX);break
+                if resume_received:raise SafetyStop('受取済み画面を確認できません。受取操作もリセットも送りません。')
                 if self.actions>=12:raise SafetyStop('受取前の操作上限です。追加操作・リセットは送りません。')
                 self.send('A',image,[0,0,400,240] if decision=='field' else DIALOGUE_BOX)
                 previous=text;since=time.monotonic()
@@ -228,8 +244,14 @@ class AutomaticDelivery:
             self.send('A',image,screen_stage(image,'continue')[2])
             engine.status('開始位置への復帰を確認中。')
             self.wait_field(time.monotonic())
-            engine.report['completed_cycles']+=1
-            engine.status('自動受取→リセット1回→開始位置への復帰を確認しました。色違い判定は未検証です。')
+            engine.report['automatic_dry_run_verified']=False
+            engine.report['automatic_ready_state']=None
+            if resume_received:
+                engine.report['completed_recoveries']=engine.report.get('completed_recoveries',0)+1
+                engine.status('受取後の復帰確認が完了しました。次は「認識確認→自動テスト1周」で一連の動作を確認できます。')
+            else:
+                engine.report['completed_cycles']+=1
+                engine.status('自動受取→リセット1回→開始位置への復帰を確認しました。色違い判定は未検証です。')
         except Exception as error:engine.fail(error)
         finally:
             if self.controller is not None:self.controller.socket.close()

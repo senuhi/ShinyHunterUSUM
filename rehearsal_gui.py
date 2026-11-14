@@ -89,11 +89,13 @@ class RehearsalWindow(tk.Toplevel):
         self.record_frame=record;self.play_frame=play
         self.auto_frame=ttk.LabelFrame(body,text='記録なしの自動テスト（最大1周）',padding=8)
         ttk.Label(self.auto_frame,text='会話中から開始できます。受取完了を確認した場合だけ、リセットを1回送ります。\nその後タイトル・つづきから・開始位置への復帰を自動で確認します。').grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,6))
-        ttk.Checkbutton(self.auto_frame,text='配達員の前で、受取前セーブ済み・手持ちに空きあり',variable=self.saved).grid(row=1,column=0,columnspan=3,sticky='w')
+        self.saved_check=ttk.Checkbutton(self.auto_frame,text='配達員の前で、受取前セーブ済み・手持ちに空きあり',variable=self.saved)
+        self.saved_check.grid(row=1,column=0,columnspan=3,sticky='w')
         self.auto_check_button=ttk.Button(self.auto_frame,text='1. 認識確認（送信0）',command=lambda:self.automatic(False))
         self.auto_check_button.grid(row=2,column=0,pady=8,sticky='w')
         self.auto_live_button=ttk.Button(self.auto_frame,text='2. 自動テスト1周',command=lambda:self.automatic(True))
         self.auto_live_button.grid(row=2,column=1,padx=8,pady=8,sticky='w')
+        self.auto_recover_button=ttk.Button(self.auto_frame,text='受取後の復帰テスト',command=lambda:self.automatic(True,True))
         ttk.Label(self.auto_frame,text='初回のOCR準備には約40〜60秒かかる場合があります。準備中は入力しません。').grid(row=3,column=0,columnspan=3,sticky='w')
         self.toggle_advanced()
         ttk.Label(body,text='色違い判定はしません。未知の画面・映像停止・通信断では停止し、再リセットしません。').grid(row=7,sticky='w',pady=(6,0))
@@ -204,7 +206,7 @@ class RehearsalWindow(tk.Toplevel):
             self.record_frame.grid_remove();self.play_frame.grid_remove()
             self.auto_frame.grid(row=5,sticky='ew',pady=6)
 
-    def automatic(self, live):
+    def automatic(self, live, resume_received=False):
         def action():
             engine=self.require_engine()
             if live and not self.saved.get():raise ValueError('受取前セーブ・配達員の前・手持ちの空きを確認してください。')
@@ -214,10 +216,12 @@ class RehearsalWindow(tk.Toplevel):
                 raise ValueError('先に「1. 認識確認（送信0）」を完了してください。')
             approved=False
             if live:
+                text=('現在の受取済み画面から、リセット1回→START→続きからA→開始位置の復帰確認を行います。\n新しい受取操作は送りません。最大3操作です。' if resume_received else
+                      '日本語ピカチュウの受取会話を自動で進めます。\n受取完了を確認できた場合だけリセット1回→START→続きからA→復帰確認を行います。\n最大15操作です。')
                 approved=messagebox.askyesno('自動受取・リセットを1周だけ実行',
-                    '日本語ピカチュウの受取会話を自動で進めます。\n受取完了を確認できた場合だけリセット1回→START→続きからA→復帰確認を行います。\n\n最大15操作。セーブ・色違い判定は行いません。\n読めない画面・映像停止・通信断では停止します。\n\n今回の1周を実行しますか？',parent=self)
+                    text+'\n\nセーブ・色違い判定は行いません。\n読めない画面・映像停止・通信断では停止します。\n\n今回の試験を実行しますか？',parent=self)
                 if not approved:return
-            runner.start(saved=self.saved.get(),approved=approved,live=live)
+            runner.start(saved=self.saved.get(),approved=approved,live=live,resume_received=resume_received)
         self.attempt(action)
 
     def manual_next(self):
@@ -264,9 +268,17 @@ class RehearsalWindow(tk.Toplevel):
                 self.canvases[s].delete('video');self.canvases[s].create_image(0,0,image=self.photos[s],anchor='nw',tags='video')
                 self.canvases[s].tag_lower('video');self.drawn[s]=image
             report=self.engine.report
-            self.stats.set(f'上 {counts[1]}枚 / 下 {counts[0]}枚 · 入力 {report["controller_packets"]}パケット · リセット {report["reset_attempts"]}回 · 完了 {report["completed_cycles"]}周')
+            self.stats.set(f'上 {counts[1]}枚 / 下 {counts[0]}枚 · 入力 {report["controller_packets"]}パケット · リセット {report["reset_attempts"]}回 · 完了 {report["completed_cycles"]}周 · 復帰 {report.get("completed_recoveries",0)}回')
             state='disabled' if self.engine.playing else 'normal'
             for widget in (self.record_button,self.finish_button,self.play_button,self.auto_check_button,self.auto_live_button):widget.config(state=state)
+            if report.get('automatic_ready_state')=='received':
+                self.saved_check.config(text='受取前セーブ済み（受取後は保存していない）')
+                self.auto_live_button.config(state='disabled')
+                self.auto_recover_button.grid(row=2,column=1,padx=8,pady=8,sticky='w');self.auto_live_button.grid_remove()
+                self.auto_recover_button.config(state=state)
+            else:
+                self.saved_check.config(text='配達員の前で、受取前セーブ済み・手持ちに空きあり')
+                self.auto_recover_button.grid_remove();self.auto_live_button.grid(row=2,column=1,padx=8,pady=8,sticky='w')
             for widget in self.settings:widget.config(state='disabled' if self.busy else 'normal')
             self.backend_box.config(state='disabled' if self.busy else 'readonly')
         self.after(100,self.tick)
