@@ -3,6 +3,47 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest: receive → summary → normal-only reset (2026-11-14)
+
+The operator reported that the fixed receive/reset round returned, and correctly
+pointed out that opening and checking the received Pokemon was missing. The
+latest private run sent 18 datagrams / one reset. Its counter stayed at zero
+because the lower Rotom map had changed into a question after loading, although
+the upper field scene returned (upper MAE ~0.037, lower ~0.431). Fixed diagnostics
+now verify the upper saved-location scene, retaining freshness for both screens.
+This is not a reason to weaken colour or communication checks.
+
+The diagnostic now clears dialogue with upstream's ten B presses, opens the
+Pokemon menu, selects the last slot using the declared pre-receipt party count,
+and selects Summary with A/A. The operator confirmed four pre-receipt Pokemon;
+the deterministic path from the first slot is Down, Down, A, A. These newly added
+navigation steps have not yet been physically validated. All runs still start
+at the same saved pre-receipt NPC, without dialogue.
+
+The existing `colour_verdict` function and upstream 8×8 USUM star colour references
+are reused. Vision must find the expected name and two OT/ID/experience field
+groups. Three new pairs must agree; a final new pair must still be normal before
+reset. Shiny, unknown, conflicting, stale, lost-name/context or broken-stream
+results cannot reset. Default is to stop at Summary even on normal: it is a live
+navigation diagnostic with no reset, distinct from the zero-input passive check.
+Turning that option off requires explicit in-app permission for the one reset.
+The references and Japanese coordinates remain UNVERIFIED and are configurable
+in `profiles/pikachu-diagnostic-ja.json`. No shiny accuracy or hunt live gate is
+claimed or enabled. Full normal-run budget for four party members is 22 presses
+/ 66 datagrams; summary-only is 19 / 57. Neither mode saves the game.
+
+Software checks use synthetic fixtures. Real Summary recognition, actual shiny
+star footage, three-target gift navigation and physical normal-only reset
+verification remain outstanding. See [SUMMARY_TEST_JA.md](SUMMARY_TEST_JA.md).
+
+86 unit/loopback tests passed, including three colour states, name/context
+rejection, default summary stop, unknown receipt, conflicting results, changed
+final verdict and disconnect-before-reset. Native GUI + actual loopback TCP/UDP
+and Apple's Vision passed both the synthetic 66-datagram full normal round and
+the 57-datagram summary-only stop. A 1.1-second fraction delay and a changed lower
+Rotom screen after reset were included. Waits were asserted but shortened in
+the simulation. These checks do not validate physical menu timing or colours.
+
 ## Latest: one saved NPC start, timed navigation (2026-11-14)
 
 Per the operator's correction, the default diagnostic now starts only in the

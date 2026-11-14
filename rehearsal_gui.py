@@ -16,7 +16,7 @@ class RehearsalWindow(tk.Toplevel):
     def __init__(self, app):
         super().__init__(app)
         self.app = app; self.engine = None; self.events = queue.Queue(); self.closed = False
-        self.title('実機テスト · 固定手順の受取とリセット')
+        self.title('実機テスト · 受取と情報画面判定')
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.columnconfigure(0, weight=1)
         self.photos = {}; self.drawn = {}; self.drag_start = {}; self.rectangles = {}
@@ -26,6 +26,7 @@ class RehearsalWindow(tk.Toplevel):
         self.console = tk.StringVar(value=app.General.IPDS.Entry.get())
         self.input_port = tk.StringVar(value=app.General.inputport.get())
         self.passive = tk.BooleanVar(value=True); self.saved = tk.BooleanVar(value=False)
+        self.party_before=tk.IntVar(value=4);self.stop_at_summary=tk.BooleanVar(value=True)
         self.received = tk.BooleanVar(value=False); self.cycles = tk.IntVar(value=1)
         self.button = tk.StringVar(value='A'); self.status_text = tk.StringVar(value='未接続。受信開始はボタン入力を送りません。')
         self.stats = tk.StringVar(value='上 0枚 / 下 0枚 · 入力 0 · リセット 0')
@@ -33,7 +34,7 @@ class RehearsalWindow(tk.Toplevel):
         self.log_path = tk.StringVar(value='記録先は受信開始後に表示します。')
         body = ttk.Frame(self, padding=10); body.grid(sticky='nsew'); body.columnconfigure(0, weight=1)
         ttk.Label(body, text='日本語ピカチュウ · 固定手順で受取とリセットを試験', font=('', 14, 'bold')).grid(row=0, sticky='w')
-        ttk.Label(body, text='開始は「受取前に保存した受取員の前・会話なし」のみ。手持ちに空きを1つ以上確保。\n受信開始 → 接続確認（送信0）→ 固定手順で1周。受取後は保存しません。').grid(row=1, sticky='w', pady=(4, 8))
+        ttk.Label(body, text='開始は「受取前に保存した受取員の前・会話なし」のみ。手持ちに空きを1つ以上確保。\n受信開始 → 接続確認（送信0）→ 受取と情報画面テスト。受取後は保存しません。').grid(row=1, sticky='w', pady=(4, 8))
 
         connection = ttk.Frame(body); connection.grid(row=2, sticky='ew')
         self.settings = []
@@ -88,16 +89,21 @@ class RehearsalWindow(tk.Toplevel):
         ttk.Button(play,text='記録を読み込む',command=self.load).grid(row=1,column=3,columnspan=2)
         self.record_frame=record;self.play_frame=play
         self.auto_frame=ttk.LabelFrame(body,text='開始位置を固定した1周テスト',padding=8)
-        ttk.Label(self.auto_frame,text='Aを3秒間隔で3回 → 受取後の判定 → リセット1回 → 25秒待機 → START\n→ 5秒待機 → A → 12秒待機 → 最後に受取前の画面への復帰確認。通常約1分です。').grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,6))
-        self.saved_check=ttk.Checkbutton(self.auto_frame,text='受取員の前・会話なし・受取前セーブ済み・手持ちに空きあり',variable=self.saved)
+        ttk.Label(self.auto_frame,text='受取 → 会話をBで終了 → X → ポケモン → 受取個体 → つよさをみる → 星の色を判定\n通常色でリセットを許可した場合だけ、リセット1回 → START → 続行 → 元の場所へ。約1〜2分。').grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,6))
+        self.saved_check=ttk.Checkbutton(self.auto_frame,text='受取員の前・会話なしで保存済み／メニューはポケモン・手持ちは先頭を選択',variable=self.saved)
         self.saved_check.grid(row=1,column=0,columnspan=3,sticky='w')
+        options=ttk.Frame(self.auto_frame);options.grid(row=2,column=0,columnspan=3,sticky='w',pady=4)
+        ttk.Label(options,text='受取前の手持ち数').pack(side='left')
+        self.party_box=ttk.Spinbox(options,from_=1,to=5,textvariable=self.party_before,width=3)
+        self.party_box.pack(side='left',padx=6)
+        ttk.Checkbutton(options,text='情報画面で停止（リセットしない・初期設定）',variable=self.stop_at_summary).pack(side='left',padx=8)
         self.auto_check_button=ttk.Button(self.auto_frame,text='1. 接続確認（送信0）',command=lambda:self.fixed(False))
-        self.auto_check_button.grid(row=2,column=0,pady=8,sticky='w')
-        self.auto_live_button=ttk.Button(self.auto_frame,text='2. 固定手順で1周',command=lambda:self.fixed(True))
-        self.auto_live_button.grid(row=2,column=1,padx=8,pady=8,sticky='w')
-        ttk.Label(self.auto_frame,text='途中の会話・タイトルは画像判定しません。判定器の初回準備中は入力を送りません。').grid(row=3,column=0,columnspan=3,sticky='w')
+        self.auto_check_button.grid(row=3,column=0,pady=8,sticky='w')
+        self.auto_live_button=ttk.Button(self.auto_frame,text='2. 受取→情報画面テスト',command=lambda:self.fixed(True))
+        self.auto_live_button.grid(row=3,column=1,padx=8,pady=8,sticky='w')
+        ttk.Label(self.auto_frame,text='色設定は上流の参照値で日本語実機では未校正です。最初は情報画面で結果を確認してください。').grid(row=4,column=0,columnspan=3,sticky='w')
         self.toggle_advanced()
-        ttk.Label(body,text='この診断は色違い判定なし。通信・映像異常で停止し、受取後の判定不明ではリセットしません。').grid(row=7,sticky='w',pady=(6,0))
+        ttk.Label(body,text='色違い候補・判定不能・通信／映像異常ではリセットしません。ゲーム内セーブは行いません。').grid(row=7,sticky='w',pady=(6,0))
         ttk.Label(body,textvariable=self.status_text,wraplength=740).grid(row=8,sticky='w',pady=4)
         ttk.Label(body,textvariable=self.stats).grid(row=9,sticky='w')
         ttk.Label(body,textvariable=self.scores).grid(row=10,sticky='w')
@@ -210,16 +216,22 @@ class RehearsalWindow(tk.Toplevel):
             engine=self.require_engine()
             if live and not self.saved.get():raise ValueError('受取前セーブ・配達員の前・手持ちの空きを確認してください。')
             from fixed_delivery import FixedDelivery
+            from summary_check import summary_buttons
+            party=self.party_before.get();summary_buttons(party)
+            stop_at_summary=self.stop_at_summary.get()
             runner=FixedDelivery(engine)
             if live and not engine.report.get('fixed_preflight_verified'):
                 raise ValueError('受取員の前で「1. 接続確認（送信0）」を行ってください。')
             approved=False
             if live:
-                text='受取員の前（会話なし）から開始します。\nAを3秒間隔で3回送り、受取後だけ判定します。\n確認できた場合だけ、リセット1回→25秒→START→5秒→A→12秒→復帰確認。\n\n最大6操作。会話途中・タイトルでは画像判定しません。'
-                approved=messagebox.askyesno('自動受取・リセットを1周だけ実行',
-                    text+'\n\nセーブ・色違い判定は行いません。\n受取後の判定不明・映像停止・通信断ではリセットしません。\n\n保存した受取員の前から1周を実行しますか？',parent=self)
+                budget=3+len(summary_buttons(party))+(0 if stop_at_summary else 3)
+                text=f'受取員の前（会話なし）から、Aを3秒間隔で3回送ります。\nB×10→X→ポケモン→{party+1}番目→つよさをみる、の固定手順です。\nメニューはポケモン・手持ちカーソルは先頭の状態で保存してください。\n'
+                text+=('情報画面で判定して停止し、リセットしません。' if stop_at_summary else '通常色の3フレーム一致と送信直前の再判定を確認した場合だけ、\nリセット1回→25秒→START→5秒→A→12秒→復帰確認。')
+                text+=f'\n\n最大{budget}操作。途中の会話・メニュー・タイトルは画像判定しません。'
+                approved=messagebox.askyesno('情報画面まで実行（リセットなし）' if stop_at_summary else '通常色だけリセットして1周を実行',
+                    text+'\n\n日本語の色座標・色参照値は実機未校正です。セーブは行いません。\n色違い候補・判定不能・映像停止・通信断ではリセットしません。\n\n今回の試験を実行しますか？',parent=self)
                 if not approved:return
-            runner.start(saved=self.saved.get(),approved=approved,live=live)
+            runner.start(saved=self.saved.get(),approved=approved,live=live,party_before=party,stop_at_summary=stop_at_summary)
         self.attempt(action)
 
     def manual_next(self):
@@ -258,6 +270,9 @@ class RehearsalWindow(tk.Toplevel):
             elif kind=='scores':self.scores.set('照合スコア: '+' / '.join(('下' if k=='0' else '上')+f' {v:.4f}' for k,v in value.items())+'（上限0.035）')
             elif kind=='manual_ready':self.next_button.config(state='normal' if value else 'disabled')
             elif kind=='ocr':self.scores.set('読取: '+value[:120])
+            elif kind=='summary':
+                names={'normal':'通常色候補','shiny':'色違い候補','unknown':'判定不能'}
+                self.scores.set(f'情報画面: {names[value["verdict"]]} · 通常距離 {value["normal_distance"]:.3f} / 色違い距離 {value["shiny_distance"]:.3f} · 目印 {len(value["context"])}個')
         if self.engine is not None:
             with self.engine.lock:latest=dict(self.engine.latest);counts=dict(self.engine.counts)
             for s,image in latest.items():
@@ -266,7 +281,7 @@ class RehearsalWindow(tk.Toplevel):
                 self.canvases[s].delete('video');self.canvases[s].create_image(0,0,image=self.photos[s],anchor='nw',tags='video')
                 self.canvases[s].tag_lower('video');self.drawn[s]=image
             report=self.engine.report
-            self.stats.set(f'上 {counts[1]}枚 / 下 {counts[0]}枚 · 入力 {report["controller_packets"]}パケット · リセット {report["reset_attempts"]}回 · 完了 {report["completed_cycles"]}周 · 復帰 {report.get("completed_recoveries",0)}回')
+            self.stats.set(f'上 {counts[1]}枚 / 下 {counts[0]}枚 · 入力 {report["controller_packets"]}パケット · リセット {report["reset_attempts"]}回 · 情報画面 {report.get("summary_verdict","未判定")} · 完了 {report["completed_cycles"]}周')
             state='disabled' if self.engine.playing else 'normal'
             for widget in (self.record_button,self.finish_button,self.play_button,self.auto_check_button,self.auto_live_button):widget.config(state=state)
             for widget in self.settings:widget.config(state='disabled' if self.busy else 'normal')

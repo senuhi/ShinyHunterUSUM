@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "language": "Japanese",
+  "target": "ピカチュウ",
+  "calibration_status": "UNVERIFIED: upstream USUM summary-star reference; Japanese ChirunoMod calibration pending",
+  "samples": 3,
+  "name_threshold": 0.9,
+  "context_threshold": 0.8,
+  "colour": {
+    "screen": 0,
+    "box": [59, 184, 67, 192],
+    "normal": [128.86, 242.03, 73.97],
+    "shiny": [174.08, 126.38, 40.03],
+    "max_distance": 0.15,
+    "min_margin": 0.5,
+    "max_stddev": 80
+  }
+}

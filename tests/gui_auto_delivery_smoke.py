@@ -16,6 +16,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from PIL import Image, ImageDraw, ImageFont
 from chiruno_transport import packet, setup_packets
 from tppflush import HIDButtons
+from summary_check import summary_buttons
 from USUMShinyHunter_GUI import ShinyHunterUSUM
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -34,13 +35,17 @@ def main():
         app.title('模擬テスト · 実機未接続');window.title('模擬自動テスト · 実機未接続')
         assert not window.advanced.get() and not window.record_frame.winfo_ismapped()
         assert window.auto_frame.winfo_ismapped() and window.engine is None
+        assert window.stop_at_summary.get() is True
         assert window.winfo_reqheight()+45 < window.winfo_screenheight()
         server=socket.socket();server.bind(('127.0.0.1',0));server.listen();server.settimeout(3)
         inputs=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);inputs.bind(('127.0.0.1',0));inputs.settimeout(.1)
         halted=threading.Event();lock=threading.Lock();state=[0];downs=[];errors=[]
         font=ImageFont.truetype('/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc',18)
-        assets=ROOT/'templates/ja/Diagnostics';manifest=json.loads((assets/'manifest.json').read_text())['stages']
-        expected=[int(HIDButtons.A)]*3+[int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
+        assets=ROOT/'templates/ja/Diagnostics'
+        nav=summary_buttons(4);summary_phase=3+len(nav)
+        only_summary='--summary-only' in sys.argv[1:]
+        expected=[int(HIDButtons.A)]*3+[int(getattr(HIDButtons,b)) for b,_ in nav]
+        if not only_summary:expected += [int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
         delays=[];jitter_injected=[False]
         def native_image(screen,phase,tick):
             image=Image.new('RGB',((320 if screen==0 else 400),240),(60+(tick%3),95,75))
@@ -52,9 +57,24 @@ def main():
                 draw.rectangle((15,170,385,232),fill='#30281c' if phase==3 else 'white')
                 text='とあるおかたから ピカチュウを' if phase in (1,2) else 'ピカチュウを 受け取った！'
                 draw.text((25,184),text,font=font,fill='white' if phase==3 else 'black')
-            elif phase in (4,5):
+            elif phase>=4:
                 draw.text((20,80),'NO NAVIGATION MATCHING FIXTURE',fill='white')
             else:draw.rectangle((20,20,180,100),fill='white')
+            if phase==summary_phase:
+                image=Image.new('RGB',image.size,(129,242,74));draw=ImageDraw.Draw(image)
+                if screen==0:
+                    draw.text((20,20),'ピカチュウ',font=font,fill='black')
+                    draw.text((20,60),'おや サトシ',font=font,fill='black')
+                    draw.text((20,95),'IDNo. 12345',font=font,fill='black')
+                    draw.rectangle((59,184,66,191),fill=(129,242,74))
+                else:
+                    draw.text((20,60),'けいけんち',font=font,fill='black')
+                    draw.text((20,95),'つぎのレベルまで',font=font,fill='black')
+            if screen==0 and phase==0 and len(downs)>0:
+                # A real post-reset Rotom question differs from the map; the
+                # upper saved-location scene is the final return criterion.
+                image=Image.new('RGB',image.size,'#eac090')
+                ImageDraw.Draw(image).text((20,60),'ROTOM QUESTION',fill='black')
             return image
         def produce():
             try:
@@ -92,12 +112,13 @@ def main():
                     if buttons:
                         assert len(downs)<len(expected) and buttons==expected[len(downs)],(downs,buttons)
                         downs.append(buttons)
-                        with lock:state[0]=(state[0]+1)%6
+                        with lock:state[0]=(state[0]+1)%(summary_phase+3)
             except Exception as error:errors.append(('input',str(error)))
         producer=threading.Thread(target=produce,daemon=True);consumer=threading.Thread(target=receive_inputs,daemon=True)
         producer.start();consumer.start()
         window.local.set('127.0.0.1:8001');window.console.set(f'127.0.0.1:{server.getsockname()[1]}')
         window.input_port.set(str(inputs.getsockname()[1]));window.saved.set(True)
+        window.stop_at_summary.set(only_summary);window.party_before.set(4)
         window.connect_button.invoke()
         phase=['receive'];deadline=time.monotonic()+70
         app.report_callback_exception=lambda *args:errors.append(('GUI',str(args)))
@@ -115,9 +136,11 @@ def main():
             elif phase[0]=='dry_run' and not engine.playing and engine.report.get('fixed_preflight_verified') and str(window.auto_live_button['state'])=='normal':
                 assert engine.report['controller_packets']==0 and not downs
                 phase[0]='live';window.auto_live_button.invoke()
-            elif phase[0]=='live' and not engine.playing and engine.report['completed_cycles']==1:
+            elif phase[0]=='live' and not engine.playing and (engine.report.get('summary_verdict')=='normal' if only_summary else engine.report['completed_cycles']==1):
                 assert downs==expected
-                assert engine.report['reset_attempts']==1 and engine.report['controller_packets']==len(expected)*3
+                assert engine.report['reset_attempts']==(0 if only_summary else 1) and engine.report['controller_packets']==len(expected)*3
+                assert engine.report['summary_verdict']=='normal'
+                assert engine.report['completed_cycles']==(0 if only_summary else 1)
                 phase[0]='passed';halted.set();app.on_closing();return
             app.after(50,watch)
         from fixed_delivery import FixedDelivery
@@ -131,9 +154,9 @@ def main():
             halted.set();producer.join(2);consumer.join(2);server.close();inputs.close()
         assert not errors,errors
         assert phase[0]=='passed',phase
-        assert delays==[3,3,3,25,5,12],delays
+        assert delays==[3]*3+[d for _,d in nav]+([] if only_summary else [25,5,12]),delays
         assert jitter_injected[0]
-        print(f'PASS: fixed GUI, loopback TCP/UDP, post-receipt Vision only, delayed fractions, {len(expected)*3} datagrams; timers shortened; NO HARDWARE')
+        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, normal-only reset, delayed fractions, {len(expected)*3} datagrams; timers shortened; NO HARDWARE')
 
 
 if __name__=='__main__':main()
