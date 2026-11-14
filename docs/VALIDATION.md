@@ -3,6 +3,32 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest physical result: Summary-normal reset and saved-location return
+
+The operator confirmed the complete sequence worked. Private run
+`delivery-t6w_6q6x` used four pre-receipt Pokemon, summary-stop=false, 22 presses /
+66 datagrams and exactly one reset. Summary pairs at 87.347, 87.936 and 88.525
+seconds were normal; the final new-pair check was also normal at 89.098 seconds.
+Reset completed at 89.254, START at 114.344 and continue A at 119.437 seconds.
+The final received upper image was reviewed and shows the character back in
+front of the same delivery NPC. The operator independently confirmed success.
+No game save was performed by the application and no reset was retried.
+
+Stop/cancellation occurred at 131.528 seconds before automatic field matching
+and cycle bookkeeping completed: the persisted `completed_cycles` is zero.
+The physical return is supported by the received image and operator report;
+it is not recorded as a successful automatic completion-counter test. This
+distinction is retained instead of editing the original logs/counter.
+
+This completes the current-save basic physical sequence check: native video
+and input, reception, received-Pokemon Summary selection, normal consensus,
+final normal recheck, one reset and return. It does not validate shiny footage,
+three-target Japanese calibration, repeated unattended rounds, disconnect
+recovery or long-duration stability. Next preparation is saved pre-receipt
+data for Poipole and both Type: Null routes, followed by route-specific fixed
+navigation and recognition checks before production. No new device input was
+sent while reviewing these records; screenshots and raw logs remain private.
+
 ## Latest physical result: Summary reached, normal consensus, zero resets
 
 The operator ran the application with four pre-receipt Pokemon and the default
