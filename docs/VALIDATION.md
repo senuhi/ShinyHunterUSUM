@@ -3,6 +3,29 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## Latest physical result: Summary reached, normal consensus, zero resets
+
+The operator ran the application with four pre-receipt Pokemon and the default
+summary-stop option, then confirmed that it worked. Private capture
+`delivery-yq87b3gh` shows the fifth-slot hat Pikachu (Lv21, OT Satoshi) on the
+summary screens. The complete fixed navigation used 19 presses / 57 datagrams.
+No reset was sent and no complete cycle was counted, as intended for this mode.
+
+Three new pairs (serials 102, 103, 105) classified normal at 50.902, 51.485 and
+52.065 seconds. Expected name and the experience/next-level fields were matched.
+The star ROI mean was [120.75, 244.140625, 70.078125], normalized normal distance
+0.07178 (limit 0.15), shiny distance 1.03098, margin 0.95921 and stddev 10.0592.
+The native images were reviewed; shipped coordinates and thresholds were unchanged.
+This validates one normal Pikachu observation, not actual shiny accuracy or any
+of the three target routes. Raw screenshots/OCR logs remain private.
+
+After the player had intentionally stopped, continued receive-only monitoring
+reported `Frozen screen 1` at 65.389 seconds because the summary image was static.
+This later monitor stop did not send inputs or invalidate the three earlier
+observations. The next full normal-only reset test must begin from the same
+saved NPC state with a new passive connection check and explicit in-app approval.
+The Summary-inclusive physical reset/restore cycle is still pending.
+
 ## Latest: receive → summary → normal-only reset (2026-11-14)
 
 The operator reported that the fixed receive/reset round returned, and correctly
