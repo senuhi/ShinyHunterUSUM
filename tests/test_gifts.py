@@ -248,6 +248,42 @@ class SafetyTests(unittest.TestCase):
         runner.receive.assert_called_once();runner.reset.assert_not_called()
         runner.tab.ir.send.assert_not_called()
 
+    def test_positive_pixels_stop_both_production_targets_without_mocking_classifier(self):
+        # Synthetic name anchors isolate the uncalibrated Japanese assets.
+        # Colour classification and the actual hunt/reset decision are NOT mocked.
+        for target in ('poipole','typenull_poni'):
+            for star in ((47,188,53,194),(60,185,66,191)):
+                with self.subTest(target=target,star=star),tempfile.TemporaryDirectory() as td:
+                    profile=fixture(Path(td),target=target);runner=runner_for(Path(td),profile,False)
+                    image=screen_for(profile,'normal')
+                    ImageDraw.Draw(image).rectangle((star[0],star[1],star[2]-1,star[3]-1),fill=(210,55,15))
+                    runner.frames.image=image
+                    runner.verify_live=Mock()  # No hardware attestation is issued.
+                    runner.receive=Mock()  # Already at a synthetic Summary.
+                    runner.general.CounterPlusOne.side_effect=AssertionError('A shiny frame must not advance to reset')
+                    self.assertIn('Shiny candidate',runner.run())
+                    self.assertIsNone(runner.normal_token)
+                    runner.tab.ir.send.assert_not_called();runner.tab.ir.press.assert_not_called()
+                    runner.general.CounterPlusOne.assert_not_called()
+                    records=[json.loads(line) for line in (runner.evidence.directory/'scores.jsonl').read_text().splitlines()]
+                    verdicts=[row for row in records if row['event']=='verdict']
+                    self.assertEqual(len(verdicts),3)
+                    self.assertTrue(all(row['verdict']=='shiny' for row in verdicts))
+                    self.assertTrue(any(row['event']=='shiny_stop' for row in records))
+                    self.assertFalse(any(row['event']=='reset_authorized' for row in records))
+
+    def test_late_red_star_blocks_reset_after_normal_consensus_for_both_targets(self):
+        for target in ('poipole','typenull_poni'):
+            with self.subTest(target=target),tempfile.TemporaryDirectory() as td:
+                profile=fixture(Path(td),target=target);runner=runner_for(Path(td),profile,False)
+                self.assertEqual(runner.classify(),'normal')
+                # Primary 8x8 remains normal green; a star at the other layout
+                # must veto the previously authorized normal token.
+                ImageDraw.Draw(runner.frames.image).rectangle((47,188,52,193),fill=(210,55,15))
+                with self.assertRaisesRegex(SafetyStop,'final normal/anchor check failed'):runner.reset()
+                self.assertIsNone(runner.normal_token)
+                runner.tab.ir.send.assert_not_called();runner.tab.ir.press.assert_not_called()
+
     def test_missing_live_calibration_blocks_before_any_navigation(self):
         runner=runner_for(self.folder,self.profile,False)
         runner.receive=Mock()

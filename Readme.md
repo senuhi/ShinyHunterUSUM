@@ -168,6 +168,7 @@ Recordは言語によらず受信できます。旧機能も既定dry-runでは�
 .venv/bin/python tests/gui_auto_delivery_smoke.py
 .venv/bin/python tests/gui_auto_delivery_smoke.py --summary-only
 .venv/bin/python tests/gui_auto_delivery_smoke.py --party-one
+.venv/bin/python tests/gui_auto_delivery_smoke.py --party-one --summary-shiny
 ```
 
 [旧3DS対応計画](docs/OLD3DS_PLAN.md)、[変更計画と事前調査](docs/IMPLEMENTATION_PLAN.md)、[検証結果と制限](docs/VALIDATION.md) を参照してください。

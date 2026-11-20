@@ -3,6 +3,38 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-21: separate shiny-positive tests; operator accepts no native shiny trial
+
+The operator correctly noted that normal-only rounds cannot verify a shiny stop.
+Two positive-path regressions now exercise both production target profiles and
+both marker layouts using actual `colour_verdict`, `GiftRunner.classify` and
+`GiftRunner.run`, rather than substituting a mocked shiny verdict. Synthetic
+name anchors isolate the still-missing native Japanese assets. Three shiny
+results reach `shiny_stop` with no reset authorization, controller press/send,
+normal-round increment or normal token. A second test first establishes normal
+consensus, adds a red marker at the alternate position and confirms that the
+actual final reset check rejects it before any reset packets.
+
+96 offline tests passed. A new native GUI loopback mode (`--party-one
+--summary-shiny`) supplies a synthetic red marker with the primary colour patch
+still green. With ordinary normal-reset operation enabled, real JPEG TCP decode,
+local Vision and the Summary guard reached shiny and stopped: 54 navigation
+datagrams, zero reset attempts. This does not operate a real console. The supplied
+YouTube marker image was also rerun through both target colour configurations;
+both detected a shiny candidate (33 red pixels). This latter check covers the
+rescaled marker, not a complete native image pair or target-name recognition.
+
+The operator explicitly authorized proceeding toward a Poipole loop on the
+current saved pre-receipt data once the available software evidence is checked,
+without waiting for a real shiny on the console. A native shiny acquisition is
+therefore not a condition for beginning the authorized controlled operation.
+Native shiny accuracy remains unverified and must not be reported otherwise.
+Native normal Summary/identity/position confirmation, fresh frames, fail-closed
+unknown handling and final normal recheck remain required. Existing missing
+templates/validation records have not been fabricated or silently bypassed.
+Connection work is pending the current console IP and HIMEM/InputRedirection
+state; no new device input or reset was sent during these checks.
+
 ## Latest scope: Poipole + Type: Null Poni using upstream reception flow
 
 The operator changed Type: Null production from Aether to Poni to avoid preparing

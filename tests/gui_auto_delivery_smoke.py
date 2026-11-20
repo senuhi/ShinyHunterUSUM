@@ -45,8 +45,11 @@ def main():
         party_before=1 if '--party-one' in sys.argv[1:] else 4
         nav=summary_buttons(party_before);summary_phase=3+len(nav)
         only_summary='--summary-only' in sys.argv[1:]
+        shiny_summary='--summary-shiny' in sys.argv[1:]
+        expect_stop=only_summary or shiny_summary
+        expected_verdict='shiny' if shiny_summary else 'normal'
         expected=[int(HIDButtons.A)]*3+[int(getattr(HIDButtons,b)) for b,_ in nav]
-        if not only_summary:expected += [int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
+        if not expect_stop:expected += [int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
         delays=[];jitter_injected=[False]
         def native_image(screen,phase,tick):
             image=Image.new('RGB',((320 if screen==0 else 400),240),(60+(tick%3),95,75))
@@ -68,6 +71,10 @@ def main():
                     draw.text((20,60),'おや サトシ',font=font,fill='black')
                     draw.text((20,95),'IDNo. 12345',font=font,fill='black')
                     draw.rectangle((59,184,66,191),fill=(129,242,74))
+                    if shiny_summary:
+                        # Keep the main patch normal: the alternate-position
+                        # red star must independently prevent any reset.
+                        draw.rectangle((47,188,52,193),fill=(210,55,15))
                 else:
                     draw.text((20,60),'けいけんち',font=font,fill='black')
                     draw.text((20,95),'つぎのレベルまで',font=font,fill='black')
@@ -137,11 +144,11 @@ def main():
             elif phase[0]=='dry_run' and not engine.playing and engine.report.get('fixed_preflight_verified') and str(window.auto_live_button['state'])=='normal':
                 assert engine.report['controller_packets']==0 and not downs
                 phase[0]='live';window.auto_live_button.invoke()
-            elif phase[0]=='live' and not engine.playing and (engine.report.get('summary_verdict')=='normal' if only_summary else engine.report['completed_cycles']==1):
+            elif phase[0]=='live' and not engine.playing and (engine.report.get('summary_verdict')==expected_verdict if expect_stop else engine.report['completed_cycles']==1):
                 assert downs==expected
-                assert engine.report['reset_attempts']==(0 if only_summary else 1) and engine.report['controller_packets']==len(expected)*3
-                assert engine.report['summary_verdict']=='normal'
-                assert engine.report['completed_cycles']==(0 if only_summary else 1)
+                assert engine.report['reset_attempts']==(0 if expect_stop else 1) and engine.report['controller_packets']==len(expected)*3
+                assert engine.report['summary_verdict']==expected_verdict
+                assert engine.report['completed_cycles']==(0 if expect_stop else 1)
                 phase[0]='passed';halted.set();app.on_closing();return
             app.after(50,watch)
         from fixed_delivery import FixedDelivery
@@ -155,9 +162,9 @@ def main():
             halted.set();producer.join(2);consumer.join(2);server.close();inputs.close()
         assert not errors,errors
         assert phase[0]=='passed',phase
-        assert delays==[3]*3+[d for _,d in nav]+([] if only_summary else [25,5,12]),delays
+        assert delays==[3]*3+[d for _,d in nav]+([] if expect_stop else [25,5,12]),delays
         assert jitter_injected[0]
-        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, normal-only reset, delayed fractions, {len(expected)*3} datagrams; timers shortened; NO HARDWARE')
+        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, verdict={expected_verdict}, resets={0 if expect_stop else 1}, delayed fractions, {len(expected)*3} datagrams; timers shortened; NO HARDWARE')
 
 
 if __name__=='__main__':main()
