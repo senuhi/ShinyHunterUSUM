@@ -3,6 +3,32 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: first native Poipole normal round completed (v1.4.3)
+
+The operator ran the dedicated app and reported one round followed by a manual
+Stop. The saved report confirms target poipole, normal Summary, reset_attempts
+one, completed_cycles one and 138 controller datagrams. No safe_stop event
+occurred. Stop subsequently changed the status text but preserved completion.
+The app was configured for one round and had already recorded its return proof.
+
+Three distinct native Summary pairs (serials 157, 159 and 160 on both screens)
+confirmed the target name via the localized-name/uncorrected path, both experience
+anchors and NORMAL. A fourth fresh pair (serials 162) confirmed NORMAL immediately
+before reset. Each normal distance was .0718 versus shiny 1.031 with red pixels
+zero. The reset attempted/completed events appear exactly once. After START and
+continue, three distinct upper saved-field matches scored .00633, .00631 and
+.00626 (limit .05), and both restored-field screenshots were saved. The report's
+elapsed time was approximately 120 seconds, including the operator/startup wait.
+Codex only read the existing files; it sent no console controls or connections.
+
+This verifies one complete native Poipole NORMAL route: receipt, first Pokedex
+registration/dialogue exit, slot-two Summary, identity/normal consensus, final
+normal recheck, reset and saved-position return. It supports proceeding to the
+operator-authorized continuous mode (cycles zero) in the same app. Native shiny
+classification/stop remains unverified; positive synthetic and saved-image
+marker tests are separate evidence. Long-run stability and native Type: Null
+Poni operation are still unverified.
+
 ## 2026-11-22: native Poipole Summary name ROI fix (v1.4.3)
 
 The operator's next attempt reached the actual Poipole Summary. It sent 120
