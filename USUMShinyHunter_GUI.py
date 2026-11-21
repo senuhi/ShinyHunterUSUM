@@ -22,7 +22,7 @@ from Lotto   import *
 from Record  import *
 from ScreenPopup import ScreenPopup
 
-VERSION = '1.3.7-macos-ja-preview'
+VERSION = '1.4.0-macos-ja-preview'
 
 # Define the application class
 class ShinyHunterUSUM(tk.Tk):
@@ -159,8 +159,8 @@ class ShinyHunterUSUM(tk.Tk):
         self.Recv   = Recv  (self.nb, self.General, self.msgbox, self.image)
         self.Battle = Battle(self.nb, self.General, self.msgbox, self.image)
         self.Diagnostics = None
-        tk.Button(self.Recv.frame, text='実機テスト（受取・リセット）',
-                  command=self.OpenDiagnostics).grid(row=3, column=0, columnspan=3, sticky='ew', padx=3, pady=6)
+        tk.Button(self.Recv.frame, text='日本語ギフト厳選',
+                  command=self.OpenGiftHunt).grid(row=3, column=0, columnspan=3, sticky='ew', padx=3, pady=6)
         self.General.LanguageHook = self.Recv.language_switch
         self.General.RecvLockHook = self.Recv.set_locked
         # Record page: independent of the hunting-mode machinery, so
@@ -199,6 +199,18 @@ class ShinyHunterUSUM(tk.Tk):
             return
         from rehearsal_gui import RehearsalWindow
         self.Diagnostics = RehearsalWindow(self)
+
+    def OpenGiftHunt(self):
+        if self.Diagnostics is not None and self.Diagnostics.winfo_exists():
+            if getattr(self.Diagnostics, 'production', False):
+                self.Diagnostics.lift()
+                return
+            if self.Diagnostics.busy:
+                self.msgbox.MsgAppend('先に実機テスト画面の受信を停止してください。')
+                return
+            self.Diagnostics.close()
+        from rehearsal_gui import RehearsalWindow
+        self.Diagnostics = RehearsalWindow(self, production=True)
 
     def call_ui(self, callback):
         if threading.current_thread() is threading.main_thread():
@@ -387,6 +399,9 @@ class ShinyHunterUSUM(tk.Tk):
             mode = int(self.General.Tab.get())
             if language == 'Japanese' and (mode != 1 or target > 2):
                 raise ValueError('Japanese supports only the three gift routes')
+            if language == 'Japanese' and mode == 1 and target in (0, 1):
+                self.OpenGiftHunt()
+                return
             dry_run = bool(self.General.dryvar.get())
             profile_path = self.General.profilevar.get() or None
             if backend == 'ChirunoMod' and (mode != 1 or target > 2):
@@ -494,6 +509,26 @@ class ShinyHunterUSUM(tk.Tk):
 
 if __name__ == '__main__':
     app = ShinyHunterUSUM()
-    if '--hardware-test' in sys.argv[1:]:
+    for flag, entry in (('--local', app.General.IPPC.Entry), ('--console', app.General.IPDS.Entry)):
+        if flag in sys.argv[1:]:
+            value = sys.argv[sys.argv.index(flag)+1]
+            entry.delete(0, 'end'); entry.insert(0, value)
+    if '--backend' in sys.argv[1:]:
+        backend = sys.argv[sys.argv.index('--backend')+1]
+        if backend not in ('ChirunoMod', 'NTR-HR'):
+            raise ValueError('Unsupported video backend')
+        app.General.backend.set(backend); app.General.backend_changed()
+    if '--gift-hunt' in sys.argv[1:]:
+        if '--target' in sys.argv[1:]:
+            target = sys.argv[sys.argv.index('--target')+1]
+            if target not in ('poipole', 'typenull_poni'):
+                raise ValueError('Unsupported gift target')
+            app.Recv.recvvar.set(0 if target == 'poipole' else 1)
+        app.OpenGiftHunt()
+        if '--cycles' in sys.argv[1:]:
+            app.Diagnostics.cycle_limit.set(int(sys.argv[sys.argv.index('--cycles')+1]))
+        if '--normal-reset' in sys.argv[1:]:
+            app.Diagnostics.stop_at_summary.set(False)
+    elif '--hardware-test' in sys.argv[1:]:
         app.OpenDiagnostics()
     app.mainloop()

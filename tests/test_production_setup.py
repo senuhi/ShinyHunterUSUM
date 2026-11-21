@@ -49,6 +49,21 @@ class ProductionPreparationTests(unittest.TestCase):
             with self.assertRaises(SafetyStop):replay_summary('typenull_poni',upper,lower,ocr)
             ocr.read.assert_not_called()
 
+    def test_low_score_name_requires_both_screens_and_uncorrected_agreement(self):
+        config=load_config(summary_profile('poipole'))
+        images={'0':Image.new('RGB',(320,240),(129,242,74)),'1':Image.new('RGB',(400,240))}
+        name={'text':'ベベノム','confidence':.3}
+        fields=[{'text':'現在の経験値','confidence':1},{'text':'次のレベルまで','confidence':1}]
+        ocr=Mock();ocr.read.side_effect=[[name]+fields,[name]+fields,[name],[name]]
+        result=check_summary(images,ocr,config)
+        self.assertEqual(result['verdict'],'normal')
+        self.assertEqual(result['name_verification'],'dual_screen_exact_uncorrected')
+        ocr.read.side_effect=[[name]+fields,fields]
+        self.assertEqual(check_summary(images,ocr,config)['verdict'],'unknown')
+        wrong={'text':'別のポケモン','confidence':1}
+        ocr.read.side_effect=[[name]+fields,[name]+fields,[wrong],[name]]
+        self.assertEqual(check_summary(images,ocr,config)['verdict'],'unknown')
+
     def test_japanese_aether_hidden_scope_also_blocks_programmatic_runner(self):
         tab=Mock();tab.ir=None
         with patch('gift_hunt.GiftRunner') as runner:

@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from automatic_delivery import AutomaticDelivery
-from gift_recognition import SafetyStop
+from gift_recognition import SafetyStop,colour_verdict
 from mac_ocr import MacOCR
 from tppflush import LumaInputServer
 from summary_check import check_summary,load_config,summary_buttons
@@ -17,6 +17,9 @@ from rehearsal import image_score
 from production_setup import DEFAULT_PARTY_BEFORE
 
 class FixedDelivery(AutomaticDelivery):
+    def configuration(self):
+        return load_config()
+
     def start(self,saved=False,approved=False,live=False,interval=3.0,party_before=DEFAULT_PARTY_BEFORE,stop_at_summary=True):
         sequence=summary_buttons(party_before)
         if type(stop_at_summary) is not bool:raise SafetyStop('情報画面で停止する設定が不正です。')
@@ -31,7 +34,7 @@ class FixedDelivery(AutomaticDelivery):
         self.engine.transport_healthy()
         self.start_screen='field';self.interval=interval;self.live=live
         self.summary_sequence=sequence;self.party_before=party_before
-        self.stop_at_summary=stop_at_summary;self.summary_config=load_config()
+        self.stop_at_summary=stop_at_summary;self.summary_config=self.configuration()
         self.normal_summary_token=None
         self.max_actions=3+len(sequence)+3
         self.engine.player=threading.Thread(target=self.run_fixed,args=(live,),daemon=True)
@@ -111,7 +114,21 @@ class FixedDelivery(AutomaticDelivery):
         else:raise SafetyStop('最終判定に使う新しい映像がありません。リセットしません。')
         if self.summary_sample(frames,'summary-final-reset-check')!='normal':
             raise SafetyStop('送信直前の通常色確認が不明です。リセットしません。')
-        self.click('RESET')
+        def final_guard():
+            current=self.engine.healthy()
+            if any(time.monotonic()-(f.started if f.started is not None else f.received)>2 for f in frames.values()):
+                raise SafetyStop('最終判定が送信前に古くなりました。リセットしません。')
+            colour=self.summary_config['colour']
+            if colour_verdict(current[str(colour['screen'])].image,colour)['verdict']!='normal':
+                raise SafetyStop('送信直前に星の判定が変わりました。リセットしません。')
+            for key,box in (('0',[0,0,190,80]),('1',[0,0,400,100])):
+                if image_score(current[key].image,frames[key].image,box)>.02:
+                    raise SafetyStop('送信直前に情報画面が変わりました。リセットしません。')
+        if self.actions>=self.max_actions:raise SafetyStop('操作上限です。リセットしません。')
+        self.actions+=1
+        # No waiting for replacement frames after the final semantic check.
+        # Recheck colour/header/freshness after log I/O, immediately before down.
+        self.engine.pulse('RESET',self.controller,before_send=final_guard)
 
     def wait_field(self,since):
         # Rotom may independently open a question after loading. It is not a

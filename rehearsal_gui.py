@@ -14,10 +14,13 @@ from production_setup import DEFAULT_PARTY_BEFORE
 
 
 class RehearsalWindow(tk.Toplevel):
-    def __init__(self, app):
+    def __init__(self, app, production=False):
         super().__init__(app)
         self.app = app; self.engine = None; self.events = queue.Queue(); self.closed = False
-        self.title('実機テスト · 受取と情報画面判定')
+        self.production=production
+        self.target=tk.StringVar(value='ヌル・ポニ' if app.Recv.recvvar.get()==1 else 'ベベノム')
+        self.cycle_limit=tk.IntVar(value=1)
+        self.title('日本語ギフト厳選 · 受取・判定・周回' if production else '実機テスト · 受取と情報画面判定')
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.columnconfigure(0, weight=1)
         self.photos = {}; self.drawn = {}; self.drag_start = {}; self.rectangles = {}
@@ -34,8 +37,9 @@ class RehearsalWindow(tk.Toplevel):
         self.scores = tk.StringVar(value='照合スコア: 未測定（一致は0に近い値）')
         self.log_path = tk.StringVar(value='記録先は受信開始後に表示します。')
         body = ttk.Frame(self, padding=10); body.grid(sticky='nsew'); body.columnconfigure(0, weight=1)
-        ttk.Label(body, text='日本語ピカチュウ · 固定手順で受取とリセットを試験', font=('', 14, 'bold')).grid(row=0, sticky='w')
-        ttk.Label(body, text='開始は「受取前に保存した受取員の前・会話なし」のみ。手持ちに空きを1つ以上確保。\n受信開始 → 接続確認（送信0）→ 受取と情報画面テスト。受取後は保存しません。').grid(row=1, sticky='w', pady=(4, 8))
+        ttk.Label(body, text='日本語ギフト · アプリで受取・色判定・連続周回' if production else '日本語ピカチュウ · 固定手順で受取とリセットを試験', font=('', 14, 'bold')).grid(row=0, sticky='w')
+        intro=('ベベノムはNPC正面、ヌルはイベント境界の左側。受取前・会話なしで保存。手持ちは1匹。\n受信開始 → 接続確認（送信0）→ 開始。色違い候補・判定不能では停止し、保存はしません。' if production else '開始は「受取前に保存した受取員の前・会話なし」のみ。手持ちに空きを1つ以上確保。\n受信開始 → 接続確認（送信0）→ 受取と情報画面テスト。受取後は保存しません。')
+        ttk.Label(body,text=intro).grid(row=1,sticky='w',pady=(4,8))
 
         connection = ttk.Frame(body); connection.grid(row=2, sticky='ew')
         self.settings = []
@@ -89,20 +93,30 @@ class RehearsalWindow(tk.Toplevel):
         self.next_button.grid(row=1,column=5,padx=6)
         ttk.Button(play,text='記録を読み込む',command=self.load).grid(row=1,column=3,columnspan=2)
         self.record_frame=record;self.play_frame=play
-        self.auto_frame=ttk.LabelFrame(body,text='開始位置を固定した1周テスト',padding=8)
+        self.auto_frame=ttk.LabelFrame(body,text='受取・判定・周回（開始で3DS操作）' if production else '開始位置を固定した1周テスト',padding=8)
         ttk.Label(self.auto_frame,text='受取 → 会話をBで終了 → X → ポケモン → 受取個体 → つよさをみる → 星の色を判定\n通常色でリセットを許可した場合だけ、リセット1回 → START → 続行 → 元の場所へ。約1〜2分。').grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,6))
-        self.saved_check=ttk.Checkbutton(self.auto_frame,text='受取員の前・会話なしで保存済み／メニューはポケモン・手持ちは先頭を選択',variable=self.saved)
+        self.saved_check=ttk.Checkbutton(self.auto_frame,text='受取前の開始位置・会話なしで保存済み／手持ち1匹・メニューと手持ちは先頭' if production else '受取員の前・会話なしで保存済み／メニューはポケモン・手持ちは先頭を選択',variable=self.saved)
         self.saved_check.grid(row=1,column=0,columnspan=3,sticky='w')
         options=ttk.Frame(self.auto_frame);options.grid(row=2,column=0,columnspan=3,sticky='w',pady=4)
         ttk.Label(options,text='受取前の手持ち数').pack(side='left')
         self.party_box=ttk.Spinbox(options,from_=1,to=5,textvariable=self.party_before,width=3)
         self.party_box.pack(side='left',padx=6)
+        if production:self.party_box.config(state='disabled')
         ttk.Checkbutton(options,text='情報画面で停止（リセットしない・初期設定）',variable=self.stop_at_summary).pack(side='left',padx=8)
+        button_row=3
+        if production:
+            round_options=ttk.Frame(self.auto_frame);round_options.grid(row=3,column=0,columnspan=3,sticky='w',pady=4)
+            ttk.Label(round_options,text='対象').pack(side='left')
+            self.target_box=ttk.Combobox(round_options,textvariable=self.target,values=('ベベノム','ヌル・ポニ'),state='readonly',width=12)
+            self.target_box.pack(side='left',padx=6)
+            ttk.Label(round_options,text='周回数（0＝停止するまで連続）').pack(side='left',padx=(12,0))
+            self.cycle_box=ttk.Spinbox(round_options,from_=0,to=100000,textvariable=self.cycle_limit,width=6)
+            self.cycle_box.pack(side='left',padx=6);button_row=4
         self.auto_check_button=ttk.Button(self.auto_frame,text='1. 接続確認（送信0）',command=lambda:self.fixed(False))
-        self.auto_check_button.grid(row=3,column=0,pady=8,sticky='w')
-        self.auto_live_button=ttk.Button(self.auto_frame,text='2. 受取→情報画面テスト',command=lambda:self.fixed(True))
-        self.auto_live_button.grid(row=3,column=1,padx=8,pady=8,sticky='w')
-        ttk.Label(self.auto_frame,text='色設定は上流の参照値で日本語実機では未校正です。最初は情報画面で結果を確認してください。').grid(row=4,column=0,columnspan=3,sticky='w')
+        self.auto_check_button.grid(row=button_row,column=0,pady=8,sticky='w')
+        self.auto_live_button=ttk.Button(self.auto_frame,text='2. 開始（受取・判定・周回）' if production else '2. 受取→情報画面テスト',command=lambda:self.fixed(True))
+        self.auto_live_button.grid(row=button_row,column=1,padx=8,pady=8,sticky='w')
+        ttk.Label(self.auto_frame,text='色違いの実機検証は未実施。赤星正例での停止確認済み。開始はこのアプリで操作します。' if production else '色設定は上流の参照値で日本語実機では未校正です。最初は情報画面で結果を確認してください。').grid(row=button_row+1,column=0,columnspan=3,sticky='w')
         self.toggle_advanced()
         ttk.Label(body,text='色違い候補・判定不能・通信／映像異常ではリセットしません。ゲーム内セーブは行いません。').grid(row=7,sticky='w',pady=(6,0))
         ttk.Label(body,textvariable=self.status_text,wraplength=740).grid(row=8,sticky='w',pady=4)
@@ -207,7 +221,7 @@ class RehearsalWindow(tk.Toplevel):
             self.reset_roi_button.pack(side='right')
             self.auto_frame.grid_remove();self.record_frame.grid();self.play_frame.grid()
         else:
-            self.help_text.set('毎回、受取前に保存した受取員の前から開始します。手動記録は不要です。')
+            self.help_text.set('保存した開始位置から受取・判定・復帰を繰り返します。0周は連続、停止ボタンで終了。' if self.production else '毎回、受取前に保存した受取員の前から開始します。手動記録は不要です。')
             self.reset_roi_button.pack_forget()
             self.record_frame.grid_remove();self.play_frame.grid_remove()
             self.auto_frame.grid(row=5,sticky='ew',pady=6)
@@ -215,11 +229,19 @@ class RehearsalWindow(tk.Toplevel):
     def fixed(self, live):
         def action():
             engine=self.require_engine()
-            if live and not self.saved.get():raise ValueError('受取前セーブ・配達員の前・手持ちの空きを確認してください。')
+            if live and not self.saved.get():raise ValueError('受取前セーブ・開始位置・手持ちの空きを確認してください。')
             from fixed_delivery import FixedDelivery
             from summary_check import summary_buttons
             party=self.party_before.get();summary_buttons(party)
             stop_at_summary=self.stop_at_summary.get()
+            if self.production:
+                from app_gift_hunt import AppGiftHunt
+                runner=AppGiftHunt(engine,'poipole' if self.target.get()=='ベベノム' else 'typenull_poni')
+                # The Start click is the explicit operation request. Save/start
+                # preconditions are checked; no repeated per-key approval.
+                runner.start(saved=self.saved.get(),approved=live,live=live,party_before=party,
+                             stop_at_summary=stop_at_summary,cycles=self.cycle_limit.get())
+                return
             runner=FixedDelivery(engine)
             if live and not engine.report.get('fixed_preflight_verified'):
                 raise ValueError('受取員の前で「1. 接続確認（送信0）」を行ってください。')
@@ -274,7 +296,9 @@ class RehearsalWindow(tk.Toplevel):
             elif kind=='summary':
                 names={'normal':'通常色候補','shiny':'色違い候補','unknown':'判定不能'}
                 marker=' · 赤星候補あり' if value.get('star_evidence',{}).get('candidate') else ''
-                self.scores.set(f'情報画面: {names[value["verdict"]]} · 通常距離 {value["normal_distance"]:.3f} / 色違い距離 {value["shiny_distance"]:.3f} · 目印 {len(value["context"])}個'+marker)
+                identity='対象名確認' if value.get('name_matched') else '対象名未確認'
+                self.scores.set(f'情報画面: {names[value["verdict"]]} · {identity} · 通常距離 {value["normal_distance"]:.3f} / 色違い距離 {value["shiny_distance"]:.3f} · 目印 {len(value["context"])}個'+marker)
+            elif kind=='shiny':self.bell();self.title('色違い候補 · 停止中・手動確認してください')
         if self.engine is not None:
             with self.engine.lock:latest=dict(self.engine.latest);counts=dict(self.engine.counts)
             for s,image in latest.items():
@@ -288,6 +312,9 @@ class RehearsalWindow(tk.Toplevel):
             for widget in (self.record_button,self.finish_button,self.play_button,self.auto_check_button,self.auto_live_button):widget.config(state=state)
             for widget in self.settings:widget.config(state='disabled' if self.busy else 'normal')
             self.backend_box.config(state='disabled' if self.busy else 'readonly')
+            if self.production:
+                self.target_box.config(state='disabled' if self.busy else 'readonly')
+                self.cycle_box.config(state='disabled' if self.engine.playing else 'normal')
         self.after(100,self.tick)
 
     def open_folder(self):

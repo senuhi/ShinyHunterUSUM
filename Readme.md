@@ -4,17 +4,18 @@
 改修元は `f49910affd7ed35b38af8e2b5b35499dcc554f0d`（v1.2.0）。
 日本語版USUMの **ベベノム、タイプ：ヌル（ポニの古道）** の受け取り厳選に対応する構造を追加しています。
 
-**旧3DSのUSUMで映像・基本入力・1回のソフトリセット復帰を確認しました。色違い判定は未検証です。**
-日本語の受け取り認識テンプレートは未収集です。
-現在そのまま使えるのはネイティブGUI、自前の映像受信・画像収集、校正／再判定と安全停止の仕組みです。
-日本語テンプレートはプレースホルダで、実画像とルートごとの検証記録がないlive実行は拒否します。
-完全自動厳選の実機動作確認済みリリースではありません。
+**v1.4では、アプリ内で日本語の受取確認・情報画面判定・指定回数／連続周回を実行する専用画面を追加しました。**
+起動は `run_gift_hunt.command`、またはメイン画面の「日本語ギフト厳選」です。
+[専用アプリの起動・開始・停止](docs/APP_HUNT_JA.md) を参照してください。
+画像テンプレートが欠けていた旧日本語経路を、そのまま本番開始可能と案内していた点は訂正します。
+専用画面は日本語OCRと上下画面の名前一致、既存の赤星・通常色再確認を使い、旧経路の偽の校正記録は作りません。
+本番2対象の実機1周はアプリ上で確認する段階であり、実機の色違い精度や長時間の安定性は未検証です。
 
 現在のピカチュウ用診断では、受取→受取個体の情報画面→通常色3枚一致→最終再確認→
 リセット1回→配達員前への復帰を実機映像と操作者の確認で記録しました。
 本番前には、対象2ルートの受取前保存データを用意し、上流のイベント進入・受取フローと
 日本語の対象名／情報画面・色判定を校正して、少数周の実機テストを行います。
-ピカチュウでの成功だけでは本番のliveは解禁しません。詳細は [検証記録](docs/VALIDATION.md) を参照してください。
+ピカチュウの確認と本番2対象の確認は区別します。詳細は [検証記録](docs/VALIDATION.md) を参照してください。
 
 **本番は手持ち1匹から開始し、受取個体は2番目です。** 上流ShinyHunterのベベノム／ポニの受取フローを土台にします。
 [上流に合わせる保存位置・本番2ルートの準備](docs/PRODUCTION_PREP_JA.md) に設定と画像の扱いをまとめています。
@@ -22,7 +23,7 @@
 ## Macでのセットアップと起動
 
 Apple Siliconのarm64ターミナルで実行します。Rosetta、Wine、Windowsは不要です。
-Python標準ライブラリとTkinter、Pillowのみを使います。OpenCV／NumPyは追加していません。
+Python標準ライブラリとTkinter、Pillowを使います。日本語OCRにはmacOSのVisionとローカルSwiftヘルパーを使います（Xcode Command Line Toolsが必要）。OpenCV／NumPyは追加していません。
 
 ```sh
 brew install python@3.12 python-tk@3.12
@@ -52,7 +53,7 @@ Homebrew以外では、Tkを含む[python.orgのmacOS版](https://www.python.org
 **公式ChokistreamやJavaは不要です。** MacからTCP 6464へ直接接続します。
 [旧3DS・HIMEMの準備と受信専用テスト](docs/OLD3DS_HIMEM_JA.md) を先に実施してください。
 HIMEM＋USUM起動後にInputRedirectionを本体側で有効化し、ゲーム中の両画面受信を確認しました
-（30秒で上61枚・下62枚）。その後、基本キーと1回のリセット復帰を確認しました。ギフト自動厳選のliveは校正完了まで拒否します。
+（30秒で上61枚・下62枚）。その後、基本キーと1回のリセット復帰を確認しました。旧テンプレート型のliveは校正完了まで拒否します。v1.4の専用アプリは上記の日本語OCR経路を使い、開始操作と情報画面の判定条件を要求します。
 
 | 機種／映像方式 | Video backend | 映像の接続 |
 | --- | --- | --- |
@@ -84,7 +85,8 @@ Macでローカルネットワーク通信の許可が表示されたら許可�
 
 ## アプリ内で受取・情報画面・リセットを試す
 
-`run_hardware_test.command` を開くか、Recvの「実機テスト（受取・リセット）」を押します。
+旧ピカチュウ用の診断は `run_hardware_test.command` で開きます。
+本番2対象には `run_gift_hunt.command` を使ってください。
 現在の日本語ピカチュウで、**受取→受取個体の「つよさをみる」→色判定→通常色ならリセット1回→復帰**を試します。
 手動の操作記録は不要です。前の版は情報画面を省いた基盤試験でした。
 この成功でベベノム／タイプ：ヌル（ポニ）の2ルートの色違い認識を検証済みとは扱いません。
@@ -169,6 +171,9 @@ Recordは言語によらず受信できます。旧機能も既定dry-runでは�
 .venv/bin/python tests/gui_auto_delivery_smoke.py --summary-only
 .venv/bin/python tests/gui_auto_delivery_smoke.py --party-one
 .venv/bin/python tests/gui_auto_delivery_smoke.py --party-one --summary-shiny
+.venv/bin/python tests/gui_auto_delivery_smoke.py --production --party-one
+.venv/bin/python tests/gui_auto_delivery_smoke.py --production --party-one --summary-shiny
+.venv/bin/python tests/gui_auto_delivery_smoke.py --production --party-one --null
 ```
 
 [旧3DS対応計画](docs/OLD3DS_PLAN.md)、[変更計画と事前調査](docs/IMPLEMENTATION_PLAN.md)、[検証結果と制限](docs/VALIDATION.md) を参照してください。

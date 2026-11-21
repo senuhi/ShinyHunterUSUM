@@ -30,7 +30,13 @@ def main():
     with tempfile.TemporaryDirectory() as td:
         os.environ['USUM_DATA_DIR']=str(Path(td)/'settings')
         os.environ['USUM_CAPTURE_DIR']=str(Path(td)/'captures')
-        app=ShinyHunterUSUM();app.OpenDiagnostics();app.update()
+        production='--production' in sys.argv[1:]
+        null_target='--null' in sys.argv[1:]
+        target_name=('タイプ：ヌル' if null_target else 'ベベノム') if production else 'ピカチュウ'
+        app=ShinyHunterUSUM()
+        if production:app.OpenGiftHunt()
+        else:app.OpenDiagnostics()
+        app.update()
         window=app.Diagnostics
         app.title('模擬テスト · 実機未接続');window.title('模擬自動テスト · 実機未接続')
         assert not window.advanced.get() and not window.record_frame.winfo_ismapped()
@@ -45,6 +51,8 @@ def main():
         party_before=1 if '--party-one' in sys.argv[1:] else 4
         nav=summary_buttons(party_before);summary_phase=3+len(nav)
         only_summary='--summary-only' in sys.argv[1:]
+        if production:
+            window.target.set('ヌル・ポニ' if null_target else 'ベベノム');window.cycle_limit.set(1)
         shiny_summary='--summary-shiny' in sys.argv[1:]
         expect_stop=only_summary or shiny_summary
         expected_verdict='shiny' if shiny_summary else 'normal'
@@ -59,7 +67,7 @@ def main():
                 else:draw.rectangle((10,10,300,200),fill='#406080')
             elif phase in (1,2,3):
                 draw.rectangle((15,170,385,232),fill='#30281c' if phase==3 else 'white')
-                text='とあるおかたから ピカチュウを' if phase in (1,2) else 'ピカチュウを 受け取った！'
+                text='とあるおかたから '+target_name+'を' if phase in (1,2) else target_name+'を 受け取った！'
                 draw.text((25,184),text,font=font,fill='white' if phase==3 else 'black')
             elif phase>=4:
                 draw.text((20,80),'NO NAVIGATION MATCHING FIXTURE',fill='white')
@@ -67,7 +75,7 @@ def main():
             if phase==summary_phase:
                 image=Image.new('RGB',image.size,(129,242,74));draw=ImageDraw.Draw(image)
                 if screen==0:
-                    draw.text((20,20),'ピカチュウ',font=font,fill='black')
+                    draw.text((20,20),target_name,font=font,fill='black')
                     draw.text((20,60),'おや サトシ',font=font,fill='black')
                     draw.text((20,95),'IDNo. 12345',font=font,fill='black')
                     draw.rectangle((59,184,66,191),fill=(129,242,74))
@@ -76,6 +84,7 @@ def main():
                         # red star must independently prevent any reset.
                         draw.rectangle((47,188,52,193),fill=(210,55,15))
                 else:
+                    if production:draw.text((20,20),target_name,font=font,fill='black')
                     draw.text((20,60),'けいけんち',font=font,fill='black')
                     draw.text((20,95),'つぎのレベルまで',font=font,fill='black')
             if screen==0 and phase==0 and len(downs)>0:
@@ -107,7 +116,7 @@ def main():
                             halted.wait(.065)
                         tick+=1
             except Exception as error:
-                if not halted.is_set():errors.append(('stream',str(error)))
+                if not halted.is_set() and not (production and window.engine.stop.is_set()):errors.append(('stream',str(error)))
         def receive_inputs():
             try:
                 while not halted.is_set():
@@ -132,7 +141,7 @@ def main():
         app.report_callback_exception=lambda *args:errors.append(('GUI',str(args)))
         def watch():
             engine=window.engine
-            if engine is not None and engine.stop.is_set():errors.append(('safe_stop',engine.report['status']))
+            if engine is not None and engine.stop.is_set() and (not production or engine.report['status'].startswith('安全停止')):errors.append(('safe_stop',engine.report['status']))
             if errors or time.monotonic()>deadline:
                 if not errors:errors.append(('timeout',engine.report if engine else None))
                 if engine is not None:
@@ -146,7 +155,7 @@ def main():
                 phase[0]='live';window.auto_live_button.invoke()
             elif phase[0]=='live' and not engine.playing and (engine.report.get('summary_verdict')==expected_verdict if expect_stop else engine.report['completed_cycles']==1):
                 assert downs==expected
-                assert engine.report['reset_attempts']==(0 if expect_stop else 1) and engine.report['controller_packets']==len(expected)*3
+                assert engine.report['reset_attempts']==(0 if expect_stop else 1) and engine.report['controller_packets']==len(expected)*3+(9 if production and null_target else 0)
                 assert engine.report['summary_verdict']==expected_verdict
                 assert engine.report['completed_cycles']==(0 if expect_stop else 1)
                 phase[0]='passed';halted.set();app.on_closing();return
@@ -162,9 +171,10 @@ def main():
             halted.set();producer.join(2);consumer.join(2);server.close();inputs.close()
         assert not errors,errors
         assert phase[0]=='passed',phase
-        assert delays==[3]*3+[d for _,d in nav]+([] if expect_stop else [25,5,12]),delays
+        receipt_delays=([.1]*3 if null_target else [])+[1]*3 if production else [3]*3
+        assert delays==receipt_delays+[d for _,d in nav]+([] if expect_stop else [25,5,12]),delays
         assert jitter_injected[0]
-        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, verdict={expected_verdict}, resets={0 if expect_stop else 1}, delayed fractions, {len(expected)*3} datagrams; timers shortened; NO HARDWARE')
+        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, verdict={expected_verdict}, resets={0 if expect_stop else 1}, delayed fractions, {len(expected)*3+(9 if production and null_target else 0)} datagrams; production={production}; timers shortened; NO HARDWARE')
 
 
 if __name__=='__main__':main()

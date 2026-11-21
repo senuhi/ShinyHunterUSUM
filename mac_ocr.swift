@@ -20,7 +20,7 @@ while let line = readLine() {
             request.recognitionLanguages = ["ja-JP", "en-US"]
             request.usesLanguageCorrection = input.correction ?? true
             if request.usesLanguageCorrection {
-                request.customWords = ["ピカチュウ", "サトシ", "受け取った", "うけとった", "PUSH", "START", "BUTTON"]
+                request.customWords = ["ピカチュウ", "ベベノム", "タイプ：ヌル", "タイプ:ヌル", "タイプヌル", "サトシ", "受け取った", "うけとった", "もらった", "PUSH", "START", "BUTTON"]
             }
             try VNImageRequestHandler(data: image, options: [:]).perform([request])
             let rows = (request.results ?? []).compactMap { result -> Row? in

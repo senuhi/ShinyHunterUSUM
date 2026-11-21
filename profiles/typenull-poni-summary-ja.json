@@ -34,5 +34,6 @@
       202
     ]
   },
-  "route": "typenull_poni"
+  "route": "typenull_poni",
+  "name_verification": "dual_screen_exact_uncorrected"
 }

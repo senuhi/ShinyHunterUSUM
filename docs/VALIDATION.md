@@ -3,6 +3,59 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-21: v1.4 dedicated Japanese app loop completed in software
+
+The old template-driven Japanese route did not have native target assets and was
+not ready to start. v1.4 supplies a distinct app-owned path for Poipole and Type:
+Null Poni using local Vision receipt confirmation, with shared transport, input,
+Summary checking and final normal-only reset guards. No template calibration or
+hardware validation attestation was invented. English and the legacy diagnostic
+remain available. Party size is one; the new gift is slot two.
+
+The dedicated screen supports one round, a selected count, or zero for continuous
+rounds. Startup, reception and the passive connection check send no controls.
+The operator's Start click enables the selected run. By default it stops at the
+Summary screen without reset. Explicit normal-reset operation requires three
+fresh matching normal verdicts and a fourth fresh semantic/colour check. After
+log I/O, the final send callback again checks frame age, star evidence and Summary
+headers before the reset-down datagram. A late star, a changed page, a stale
+image, unknown/mismatching classification or stream failure stops the worker.
+There is no reset retry and no game-save operation.
+
+Receipt recognition requires an exact target completion clause, independent
+uncorrected agreement and three fresh repetitions. Correct Japanese rare names
+can have discrete low Vision scores even in generated clear images. The Summary
+fallback therefore requires exact labels on both screens, the same labels on
+both uncorrected reads and at least two strong information-field anchors, in
+addition to the three-frame and final reset checks. One weak name or a conflicting
+uncorrected name remains unknown. This is corroboration, not a statistical
+accuracy guarantee.
+
+Final checks on this revision:
+
+- 106 offline/loopback tests passed (40.023 s). The sandboxed invocation initially
+  denied four local socket binds; rerunning with local-socket permission passed.
+- The app loop mock completed two rounds for each production target. Continuous
+  mode stopped on a red-star positive with reset zero for each target. Negative
+  cases include unknown/weak receipt, Stop during navigation, a final-check star,
+  and a star injected after final OCR during the reset log write: no reset down.
+- Native Tk production GUI with real loopback Chiruno TCP/JPEG decoding, local
+  Vision and Luma UDP: Poipole normal 63 datagrams/reset one; Poni normal 72
+  datagrams/reset one; Poipole star positive 54 datagrams/reset zero. Timers are
+  shortened in this harness. Poni normal and Poipole positive were repeated after
+  the final packet guard was added. All images/transitions are synthetic.
+- Native English Chiruno GUI regression: normal dry-run, controller packets zero,
+  settings/controls/popups/shutdown passed. Transport tests also cover NTR-HR.
+
+The operator is away with the console closed. No new physical button/reset was
+sent during this work. The current Poipole/Type: Null data have not completed a
+round in this new app yet. Real shiny accuracy and long-run stability are not
+verified. The supplied star screenshot and positive synthetic tests support the
+implemented stop path; they do not prove every possible native image will be
+classified correctly. The operator has authorized proceeding without waiting for
+a real shiny trial. First native operation remains in the app, not via Codex's
+network/individual-button tools.
+
 ## 2026-11-21: separate shiny-positive tests; operator accepts no native shiny trial
 
 The operator correctly noted that normal-only rounds cannot verify a shiny stop.

@@ -5,6 +5,7 @@ Name/context anchors are mandatory even if an arbitrary patch matches a colour.
 """
 import hashlib
 import json
+import re
 from pathlib import Path
 from PIL import Image
 from automatic_delivery import normalized
@@ -35,8 +36,23 @@ def check_summary(images,ocr,config):
     # independent groups, not just a Pokemon name or the word "summary".
     groups=(('おや','親'),('IDNO','IDナンバ'),('けいけんち','経験値'),('つぎのレベル','次のレベル'))
     anchors=[group[0] for group in groups if any(token in text for token in group)]
+    method='high_score_name';raw_name_rows=None
+    if not name and config.get('name_verification')=='dual_screen_exact_uncorrected' and len(anchors)>=2:
+        # Native Vision's CJK scores are discrete, not probabilities. A rare
+        # species may be read exactly at .3 on BOTH screens. Do not lower the
+        # single-read threshold: require exact labels on both screens plus an
+        # uncorrected read of both, then the caller's three-frame consensus and
+        # final reset recheck. One weak label alone cannot authorize anything.
+        pattern=r'(?:名前)?'+re.escape(normalized(config['target']))+r'(?:[♂♀]|LV\.?[0-9]{1,3})*'
+        def exact(values):
+            return any(row['confidence']>=.3 and re.fullmatch(pattern,normalized(row['text'])) for row in values)
+        if all(exact(rows[key]) for key in ('0','1')):
+            raw_name_rows={key:ocr.read(images[key],correction=False) for key in ('0','1')}
+            name=all(exact(raw_name_rows[key]) for key in ('0','1'))
+            method='dual_screen_exact_uncorrected' if name else 'uncorrected_name_mismatch'
     result=colour_verdict(images[str(config['colour']['screen'])],config['colour'])
-    result.update(name_matched=name,context=anchors,rows=rows)
+    result.update(name_matched=name,context=anchors,rows=rows,name_verification=method)
+    if raw_name_rows is not None:result['uncorrected_name_rows']=raw_name_rows
     if not name or len(anchors)<2:result['verdict']='unknown'
     return result
 

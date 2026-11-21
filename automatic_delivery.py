@@ -19,13 +19,14 @@ def normalized(text):
     return re.sub(r'[\s！!？?。、,・：:「」『』ー\-]', '', unicodedata.normalize('NFKC', text)).upper()
 
 
-def recognize(rows, stage):
+def recognize(rows, stage, target_name='ピカチュウ'):
     # Low-confidence rows cannot authorize any action, especially a reset.
     text=normalized(''.join(r['text'] for r in rows))
     if stage=='receive':
         if any(word in text for word in ('いっぱい','満杯','ボックス','あずけますか','預けますか','逃が','にがす','ニックネム','レポト','セブ','交換')):
             return 'unknown',text
-        past=r'ピカチュウを(?:うけとった|受け取った|受けとった|もらった)'
+        target=re.escape(normalized(target_name))
+        past=target+r'を(?:うけとった|受け取った|受けとった|もらった)'
         if re.search(past,text):
             if any(mark in ''.join(r['text'] for r in rows) for mark in ('?','？','「','」','『','』')):
                 return 'unknown',text
@@ -143,7 +144,7 @@ class AutomaticDelivery:
                 continue
             crop=image.crop(DIALOGUE_BOX) if stage=='receive' else image
             rows=self.ocr.read(crop)
-            decision,text=recognize(rows,stage)
+            decision,text=recognize(rows,stage,getattr(self,'target_name','ピカチュウ'))
             if time.monotonic()-frames['1'].received>2:
                 stable=0;continue
             if decision=='received':
