@@ -183,6 +183,57 @@ class AppLoopTests(unittest.TestCase):
             self.assertEqual(e.report['completed_cycles'],0)
             self.assertNotIn(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,ir.down)
 
+    def test_missed_initial_a_is_retried_from_verified_field_then_completes(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+            class DropFirstA(Controller):
+                def __init__(self,game):super().__init__(game);self.drops=1
+                def return_control(self):
+                    if self.last==HIDButtons.A and self.drops:
+                        self.drops-=1;self.last=0
+                    super().return_control()
+            ir=DropFirstA(e.store);runner.start_retry_interval=0
+            with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                runner.start(True,True,True,stop_at_summary=False);e.player.join(10)
+            self.assertFalse(e.player.is_alive())
+            self.assertEqual(e.report['completed_cycles'],1,e.report)
+            self.assertEqual(e.report['reset_attempts'],1)
+            self.assertEqual(ir.down[:4],[HIDButtons.A]*4)
+            self.assertEqual(e.report['controller_packets'],(len(NAV)+7)*3)
+
+    def test_persistently_unresponsive_start_is_bounded_and_never_resets(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+            class DropAll(Controller):
+                def return_control(self):self.last=0
+            ir=DropAll(e.store);runner.start_retry_interval=0
+            with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                runner.start(True,True,True,stop_at_summary=False);e.player.join(6)
+            self.assertFalse(e.player.is_alive())
+            self.assertEqual(ir.down,[HIDButtons.A]*4)
+            self.assertEqual(e.report['reset_attempts'],0)
+            self.assertEqual(e.report['completed_cycles'],0)
+            self.assertIn('InputRedirection',e.report['status'])
+
+    def test_blank_field_after_dialogue_is_not_treated_as_a_new_start(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+            original=e.store.snapshot
+            def snapshot(screen,**options):
+                frame=original(screen,**options)
+                if e.store.state==2:
+                    return Frame(e.fixed_baseline[str(screen)].copy(),frame.serial,frame.received,frame.changed,frame.started)
+                return frame
+            e.store.snapshot=snapshot
+            ocr=OCR(e.store,'ベベノム');read=ocr.read
+            ocr.read=lambda image,**options: [] if e.store.state==2 else read(image,**options)
+            ir=Controller(e.store);runner.start_retry_interval=0;runner.receipt_timeout=.7
+            with patch('app_gift_hunt.MacOCR',return_value=ocr),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                runner.start(True,True,True,stop_at_summary=False);e.player.join(3)
+            self.assertFalse(e.player.is_alive())
+            self.assertEqual(ir.down,[HIDButtons.A]*2)
+            self.assertEqual(e.report['reset_attempts'],0)
+
     def test_first_registration_needs_more_than_ten_b_before_menu(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)

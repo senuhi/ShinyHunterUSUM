@@ -32,6 +32,7 @@ def main():
         os.environ['USUM_CAPTURE_DIR']=str(Path(td)/'captures')
         production='--production' in sys.argv[1:]
         null_target='--null' in sys.argv[1:]
+        drop_start=production and '--drop-first-start' in sys.argv[1:]
         target_name=('タイプ：ヌル' if null_target else 'ベベノム') if production else 'ピカチュウ'
         app=ShinyHunterUSUM()
         if production:app.OpenGiftHunt()
@@ -56,7 +57,7 @@ def main():
         shiny_summary='--summary-shiny' in sys.argv[1:]
         expect_stop=only_summary or shiny_summary
         expected_verdict='shiny' if shiny_summary else 'normal'
-        expected=[int(HIDButtons.A)]*3+[int(getattr(HIDButtons,b)) for b,_ in nav]
+        expected=[int(HIDButtons.A)]*(4 if drop_start else 3)+[int(getattr(HIDButtons,b)) for b,_ in nav]
         if not expect_stop:expected += [int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
         delays=[];jitter_injected=[False]
         def native_image(screen,phase,tick):
@@ -130,7 +131,8 @@ def main():
                     if buttons:
                         assert len(downs)<len(expected) and buttons==expected[len(downs)],(downs,buttons)
                         downs.append(buttons)
-                        with lock:state[0]=(state[0]+1)%(summary_phase+3)
+                        if not (drop_start and len(downs)==1):
+                            with lock:state[0]=(state[0]+1)%(summary_phase+3)
             except Exception as error:errors.append(('input',str(error)))
         producer=threading.Thread(target=produce,daemon=True);consumer=threading.Thread(target=receive_inputs,daemon=True)
         producer.start();consumer.start()
@@ -172,10 +174,13 @@ def main():
             halted.set();producer.join(2);consumer.join(2);server.close();inputs.close()
         assert not errors,errors
         assert phase[0]=='passed',phase
-        receipt_delays=([.1]*3 if null_target else [])+[1]*3 if production else [3]*3
+        receipt_delays=([.1]*3 if null_target else [])+[1]*(4 if drop_start else 3) if production else [3]*3
         assert delays==receipt_delays+[d for _,d in nav]+([] if expect_stop else [25,5,12]),delays
         assert jitter_injected[0]
-        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, verdict={expected_verdict}, resets={0 if expect_stop else 1}, delayed fractions, {len(expected)*3+(9 if production and null_target else 0)} datagrams; production={production}; timers shortened; NO HARDWARE')
+        if drop_start:
+            events=[json.loads(line) for line in (window.engine.directory/'events.jsonl').read_text().splitlines()]
+            assert len([row for row in events if row['event']=='receipt_start_retry'])==1
+        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, verdict={expected_verdict}, resets={0 if expect_stop else 1}, delayed fractions, {len(expected)*3+(9 if production and null_target else 0)} datagrams; production={production}; missed_start={drop_start}; timers shortened; NO HARDWARE')
 
 
 if __name__=='__main__':main()

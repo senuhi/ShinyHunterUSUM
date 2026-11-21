@@ -3,6 +3,38 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: 17 native rounds, then unresponsive start (v1.4.5)
+
+The native continuous session completed seventeen normal rounds and seventeen
+resets, then stopped during round eighteen (2289 controller datagrams). Its last
+normal reset, START and continue led to three saved-field matches (.00444,
+.00316, .00271). The next initial A attempt/completion was logged once; subsequent
+OCR was empty for the entire 75-second receipt timeout. Fresh upper/lower video
+continued at roughly .4-second assembly spans, and the separately created macOS
+sleep-prevention assertions were still active when inspected. The stopped PNG
+also matches the original saved field (.00318). There was no eighteenth reset.
+
+The app previously never retried an initial A when it produced no dialogue. This
+turned a possible single UDP input loss or late game readiness into a long wait
+and stop. The logs do not distinguish lost input, game readiness or a console-side
+InputRedirection failure; no hardware cause has been established.
+
+v1.4.5 retries the initial A at least two seconds apart, at most three times,
+ONLY before any Japanese dialogue has appeared and after three new blank-OCR
+frames match the saved upper field. Unknown transitions, stale/frozen video,
+network errors, Summary/identity uncertainty and all final-reset guards remain
+fail-closed. No automatic reset is used to recover input. If all four start
+attempts have no effect, the app explicitly asks to check InputRedirection and
+stops. This does not claim to repair a dead console input service.
+
+All 117 offline/loopback tests passed (50.737 s). Regressions cover one lost
+initial A followed by a complete round, permanently unresponsive starts bounded
+to four A presses/reset zero, and a blank field after dialogue not being treated
+as a new start. Native Tk/local Vision/loopback TCP+UDP also simulated dropping the
+first start press: one automatic retry, a normal round completed, 66 datagrams
+and one reset. These fault-injection checks are synthetic, not new physical
+console operations. Codex sent no console connection/input/reset.
+
 ## 2026-11-22: bound continuous-run diagnostic logs (v1.4.4)
 
 The operator asked whether growing upper/lower frame counters meant that all

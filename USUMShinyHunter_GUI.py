@@ -22,7 +22,7 @@ from Lotto   import *
 from Record  import *
 from ScreenPopup import ScreenPopup
 
-VERSION = '1.4.4-macos-ja-preview'
+VERSION = '1.4.5-macos-ja-preview'
 
 # Define the application class
 class ShinyHunterUSUM(tk.Tk):

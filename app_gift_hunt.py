@@ -24,6 +24,7 @@ class AppGiftHunt(FixedDelivery):
         if target not in PRODUCTION_TARGETS:raise SafetyStop('本番対象はベベノム／ヌル・ポニです。')
         self.target=target;self.route=preparation()['targets'][target]
         self.target_name=self.route['name'];self.cycle_limit=1;self.receipt_timeout=75
+        self.start_retry_interval=2.0;self.max_start_retries=3
 
     def configuration(self):return load_config(summary_profile(self.target))
 
@@ -70,7 +71,7 @@ class AppGiftHunt(FixedDelivery):
         future-tense offer mentions the name in a different Japanese position.
         """
         self.approach();end=time.monotonic()+self.receipt_timeout
-        serial=0;attempts=0;since=0
+        serial=0;attempts=0;since=0;dialogue_seen=False;field_stable=0;start_retries=0
         while time.monotonic()<end:
             frames=self.ready();frame=frames['1']
             if frame.serial<=serial or (frame.started is not None and frame.started<since):
@@ -93,12 +94,25 @@ class AppGiftHunt(FixedDelivery):
                 return
             if any(word in text for word in ('レポト','セブ','逃が','にがす','交換','ニックネム','ボックス','満杯')):
                 raise SafetyStop('想定外の受取メニューです。追加操作・リセットは送りません。')
-            # A is bounded and only advances visible dialogue (or the initial
-            # saved field). Blank transition frames do not cause extra input.
+            # A single UDP start press may have no visible effect. Retry only
+            # before ANY dialogue, on three new saved-field matches. Blank or
+            # unknown transition screens do not receive blind A presses.
             visible=any(row['confidence']>=.5 and re.search(r'[ぁ-んァ-ヶ一-龯]',row['text']) for row in rows)
-            if attempts==0 or visible:
+            dialogue_seen |= visible
+            retry_start=False
+            if attempts and not dialogue_seen and not rows and self.baseline is not None:
+                field_score=image_score(frame.image,self.baseline['1'],[0,0,400,240])
+                field_stable=field_stable+1 if field_score<=.05 else 0
+                if field_stable>=3 and time.monotonic()-since>=self.start_retry_interval:
+                    if start_retries>=self.max_start_retries:
+                        raise SafetyStop('開始Aの再送後も会話が始まりません。InputRedirectionを確認してください。リセットしません。')
+                    start_retries+=1;retry_start=True
+                    self.engine.event('receipt_start_retry',retry=start_retries,field_score=field_score,serial=frame.serial)
+                    self.engine.status(f'受取前の位置を確認。開始Aを再送します（{start_retries}/{self.max_start_retries}）。')
+            else:field_stable=0
+            if attempts==0 or visible or retry_start:
                 if attempts>=30:raise SafetyStop('受取のA操作上限です。リセットしません。')
-                self.click('A');attempts+=1;since=time.monotonic()
+                self.click('A');attempts+=1;since=time.monotonic();field_stable=0
                 self.wait(1,'受取会話を進めています')
             else:self.engine.stop.wait(.1)
         raise SafetyStop('日本語の受取完了が確認できません。リセットしません。')
