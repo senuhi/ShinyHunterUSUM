@@ -3,6 +3,30 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: receipt OCR is navigation only (v1.4.2)
+
+After the HOME-side InputRedirection startup workaround, the operator reached a
+native Poipole completion message. The corrected OCR read "SENは ベベノムをもらった！"
+with .5 confidence, but an uncorrected reread disagreed and aborted navigation.
+The capture recorded 21 input datagrams/reset zero, before entering Summary.
+This stop gate was unnecessarily applying colour-evidence standards to dialogue
+navigation and prevented useful operation despite a clear completion message.
+
+The dedicated app now uses an exact-form target completion clause as a navigation
+hint only, without a confidence floor, three-frame requirement, image refinement
+or independent uncorrected read. It switches to the bounded B cleanup and then
+Summary. Questions, future-tense offers and other target names do not constitute
+a completion hint. Silence, invalid input/transport and bounded-action timeouts
+still stop. Summary name/context/colour consensus and all final-reset guards
+are unchanged; the navigation hint cannot authorize a reset.
+
+Regressions reproduce weak receipt scores and an uncorrected receipt disagreement,
+and also a weak receipt followed by an unknown Summary: only a separately normal
+Summary permits reset; an unknown Summary still sends no reset. All 110 offline/
+loopback tests passed (46.649 s). The native Tk synthetic normal round passed
+with 63 datagrams/reset one after this change. No new physical
+console connection/input/reset was performed by Codex.
+
 ## 2026-11-22: native first-registration stop and bounded dialogue exit
 
 The first Poipole app attempt saved an unknown verdict on the Pokedex

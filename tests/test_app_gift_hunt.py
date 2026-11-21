@@ -139,7 +139,7 @@ class AppLoopTests(unittest.TestCase):
             self.assertTrue(e.stop.is_set());self.assertEqual(e.report['reset_attempts'],0)
             self.assertEqual(ir.down,[HIDButtons.A])
 
-    def test_weak_receipt_is_not_advanced_with_another_a(self):
+    def test_weak_receipt_hint_continues_to_full_summary_checks(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td);weak=OCR(e.store,'ベベノム');original=weak.read
             def read(image,**options):
@@ -149,9 +149,39 @@ class AppLoopTests(unittest.TestCase):
                 return rows
             weak.read=read
             ir,_=self.run_case(e,ocr=weak)
-            self.assertEqual(ir.down,[HIDButtons.A]*3)
+            self.assertEqual(ir.down[:3],[HIDButtons.A]*3)
+            self.assertEqual(e.report['completed_cycles'],1,e.report)
+            self.assertEqual(e.report['reset_attempts'],1)
+            self.assertEqual(e.report['summary_verdict'],'normal')
+
+    def test_receipt_uncorrected_disagreement_does_not_block_navigation(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);ocr=OCR(e.store,'ベベノム');original=ocr.read
+            def read(image,**options):
+                if e.store.state%ROUND==3 and options.get('correction') is False:
+                    return [{'text':'読取揺れ','confidence':.3}]
+                return original(image,**options)
+            ocr.read=read
+            self.run_case(e,ocr=ocr)
+            self.assertEqual(e.report['completed_cycles'],1,e.report)
+            self.assertEqual(e.report['summary_verdict'],'normal')
+            self.assertEqual(e.report['reset_attempts'],1)
+
+    def test_receipt_hint_cannot_authorize_reset_on_unknown_summary(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);ocr=OCR(e.store,'ベベノム');original=ocr.read
+            def read(image,**options):
+                rows=original(image,**options)
+                if e.store.state%ROUND==SUMMARY:
+                    return [dict(row,text='別のポケモン') if row['text']=='ベベノム' else row for row in rows]
+                if e.store.state%ROUND==3:return [dict(row,confidence=.3) for row in rows]
+                return rows
+            ocr.read=read
+            ir,_=self.run_case(e,ocr=ocr)
+            self.assertEqual(e.report['summary_verdict'],'unknown',e.report)
             self.assertEqual(e.report['reset_attempts'],0)
-            self.assertIn('低信頼度',e.report['status'])
+            self.assertEqual(e.report['completed_cycles'],0)
+            self.assertNotIn(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,ir.down)
 
     def test_first_registration_needs_more_than_ten_b_before_menu(self):
         with tempfile.TemporaryDirectory() as td:

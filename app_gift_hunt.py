@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import sys
 import time
-from automatic_delivery import DIALOGUE_BOX,recognize,normalized,receipt_ocr_image,corroborates_receipt
+from automatic_delivery import DIALOGUE_BOX,normalized
 from fixed_delivery import FixedDelivery
 from gift_recognition import SafetyStop
 from mac_ocr import MacOCR
@@ -53,66 +53,44 @@ class AppGiftHunt(FixedDelivery):
             self.engine.event('input_completed',button='CPADRIGHT')
 
     def receipt_kind(self,rows):
-        decision,text=recognize(rows,'receive',self.target_name)
-        if decision=='received':return decision,text
+        """Navigation hint only. Never authorizes a reset or a colour verdict."""
         raw=''.join(row['text'] for row in rows)
         text=normalized(raw);name=normalized(self.target_name)
-        # The supplied Japanese registration examples are an accepted gift
-        # checkpoint, not a colour verdict. Summary still independently checks
-        # the selected individual and requires three fresh decisions.
+        if any(c in raw for c in '?？「」『』'):return 'unknown',text
         registration=(text.startswith(name+'のデタが新しく') and
                       text.endswith('ポケモン図鑑に登録されます'))
         added=re.fullmatch(re.escape(name)+r'(?:は|が)(?:手持ち|てもち)に(?:加わった|くわわった)',text)
         past=re.fullmatch(r'(?:[\wぁ-んァ-ヶ一-龯]{1,12}は)?'+re.escape(name)+r'を(?:うけとった|受け取った|受けとった|もらった)',text)
-        # Vision gives correct Japanese proper-name sentences a discrete 0.5
-        # even when the isolated name is 1. This NAVIGATION checkpoint requires
-        # exact grammar, uncorrected agreement and three fresh repetitions. It
-        # never authorizes a reset: Summary name/context thresholds stay .9/.8.
-        if (registration or added or past) and rows and all(row['confidence']>=.5 for row in rows) and not any(c in raw for c in '?？「」『』'):
-            return 'received',text
-        return 'unknown',text
+        return ('received' if registration or added or past else 'unknown'),text
 
     def receive(self):
-        """A advances reception; B cleans dialogue after a confirmed gift.
+        """A advances reception; a completion hint switches to B cleanup.
 
         Keep upstream A/B ordering, but do not switch to B merely because a
         future-tense offer mentions the name in a different Japanese position.
         """
         self.approach();end=time.monotonic()+self.receipt_timeout
-        serial=0;stable=0;last=None;attempts=0;since=0
+        serial=0;attempts=0;since=0
         while time.monotonic()<end:
             frames=self.ready();frame=frames['1']
             if frame.serial<=serial or (frame.started is not None and frame.started<since):
                 self.engine.stop.wait(.03);continue
             serial=frame.serial;crop=frame.image.crop(DIALOGUE_BOX)
             rows=self.ocr.read(crop);decision,text=self.receipt_kind(rows)
-            name=re.escape(normalized(self.target_name))
-            receipt_shape=(re.search(name+r'を(?:うけとった|受け取った|受けとった|もらった)',text) or
-                           re.search(name+r'(?:は|が)(?:手持ち|てもち)に(?:加わった|くわわった)',text) or
-                           (text.startswith(normalized(self.target_name)+'のデタが新しく') and 'ポケモン図鑑に登録されます' in text))
-            if decision!='received' and receipt_shape:
-                # A possible receipt must never be dismissed with another A.
-                # Re-read a high-contrast version at the SAME threshold, then
-                # require the independent uncorrected read below as before.
-                refined=self.ocr.read(receipt_ocr_image(crop))
-                refined_decision,refined_text=self.receipt_kind(refined)
-                self.engine.event('gift_receipt_refinement',rows=rows,refined=refined)
-                if refined_decision!='received' or refined_text!=text:
-                    raise SafetyStop('受取らしい表示の読取が低信頼度です。追加入力・リセットは送りません。')
-                rows=refined;decision=refined_decision
             self.engine.healthy()
             if time.monotonic()-(frame.started if frame.started is not None else frame.received)>2:
                 raise SafetyStop('受取確認中に映像が古くなりました。追加入力しません。')
             self.engine.event('gift_receipt_read',target=self.target,rows=rows,decision=decision,text=text)
             self.engine.notify('ocr',text or '受取会話の表示待ち')
             if decision=='received':
-                raw=self.ocr.read(receipt_ocr_image(crop),correction=False)
-                if not corroborates_receipt(raw,text):raise SafetyStop('受取確認の補正なし読取が一致しません。リセットしません。')
-                stable=stable+1 if last==text else 1;last=text
-                if stable>=3:
-                    frame.image.save(self.engine.directory/'received-message.png');return
-                continue
-            stable=0;last=None
+                # Receipt OCR only selects when to stop advancing with A. It is
+                # not safety-critical colour evidence; requiring an independent
+                # OCR agreement here blocked clear native receipt screens.
+                # Field return, Summary identity/colour and final reset checks
+                # remain independent and mandatory.
+                frame.image.save(self.engine.directory/'received-message.png')
+                self.engine.status('受取表示を確認。図鑑登録・会話の終了を待ちます。')
+                return
             if any(word in text for word in ('レポト','セブ','逃が','にがす','交換','ニックネム','ボックス','満杯')):
                 raise SafetyStop('想定外の受取メニューです。追加操作・リセットは送りません。')
             # A is bounded and only advances visible dialogue (or the initial
