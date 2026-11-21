@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock,patch
-from PIL import Image
+from PIL import Image,ImageDraw
 from production_setup import DEFAULT_PARTY_BEFORE,PRODUCTION_TARGETS,preparation,summary_profile
 from summary_check import check_summary,load_config,replay_summary,summary_buttons
 from gift_recognition import SafetyStop
@@ -50,7 +50,7 @@ class ProductionPreparationTests(unittest.TestCase):
             ocr.read.assert_not_called()
 
     def test_low_score_name_requires_both_screens_and_uncorrected_agreement(self):
-        config=load_config(summary_profile('poipole'))
+        config=load_config(summary_profile('poipole'));config.pop('name_rois',None)
         images={'0':Image.new('RGB',(320,240),(129,242,74)),'1':Image.new('RGB',(400,240))}
         name={'text':'ベベノム','confidence':.3}
         fields=[{'text':'現在の経験値','confidence':1},{'text':'次のレベルまで','confidence':1}]
@@ -63,6 +63,28 @@ class ProductionPreparationTests(unittest.TestCase):
         wrong={'text':'別のポケモン','confidence':1}
         ocr.read.side_effect=[[name]+fields,[name]+fields,[wrong],[name]]
         self.assertEqual(check_summary(images,ocr,config)['verdict'],'unknown')
+
+    def test_localized_name_rois_require_both_names_and_raw_agreement(self):
+        for target,label in [('poipole','ベベノム'),('typenull_poni','タイプ：ヌル')]:
+            config=load_config(summary_profile(target))
+            images={'0':Image.new('RGB',(320,240),(129,242,74)),'1':Image.new('RGB',(400,240))}
+            original=images['0'].tobytes()
+            name=[{'text':label,'confidence':.3}]
+            fields=[{'text':'現在の経験値','confidence':1},{'text':'次のレベルまで','confidence':1}]
+            # Native failure: no lower name; a correct upper label at .3.
+            ocr=Mock();ocr.read.side_effect=[[],name+fields,name,name,name,name]
+            result=check_summary(images,ocr,config)
+            self.assertEqual(result['verdict'],'normal')
+            self.assertEqual(result['name_verification'],'dual_screen_name_roi_uncorrected')
+            self.assertEqual(images['0'].tobytes(),original)
+            wrong=[{'text':'別のポケモン','confidence':1}]
+            ocr.read.side_effect=[[],name+fields,name,name,wrong,name]
+            self.assertEqual(check_summary(images,ocr,config)['verdict'],'unknown')
+            ocr.read.side_effect=[[],name+fields,wrong,name]
+            self.assertEqual(check_summary(images,ocr,config)['verdict'],'unknown')
+            ImageDraw.Draw(images['0']).rectangle((47,188,52,193),fill=(210,55,15))
+            ocr.read.side_effect=[[],name+fields,name,name,name,name]
+            self.assertEqual(check_summary(images,ocr,config)['verdict'],'shiny')
 
     def test_japanese_aether_hidden_scope_also_blocks_programmatic_runner(self):
         tab=Mock();tab.ir=None

@@ -7,9 +7,9 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from PIL import Image
+from PIL import Image,ImageOps
 from automatic_delivery import normalized
-from gift_recognition import SafetyStop, colour_verdict
+from gift_recognition import SafetyStop, colour_verdict, roi
 
 CONFIG = Path(__file__).parent / 'profiles' / 'pikachu-diagnostic-ja.json'
 
@@ -26,6 +26,19 @@ def load_config(path=CONFIG):
     return config
 
 
+def name_roi_image(image,settings):
+    """Isolate native Japanese name glyphs; leave colour/star pixels untouched."""
+    part=roi(image,settings['box']).convert('L')
+    threshold=settings.get('threshold')
+    if threshold is not None:
+        if type(threshold) is not int or not 1<=threshold<=254:raise SafetyStop('名前の二値化設定が不正です。')
+        part=part.point(lambda value:255 if value>threshold else 0)
+    if settings.get('invert',False):part=ImageOps.invert(part)
+    padding=settings.get('padding',8)
+    if type(padding) is not int or not 0<=padding<=32:raise SafetyStop('名前の余白設定が不正です。')
+    return ImageOps.expand(part,border=padding,fill=255)
+
+
 def check_summary(images,ocr,config):
     rows={key:ocr.read(image) for key,image in images.items()}
     name=any(normalized(config['target']) in normalized(row['text']) and row['confidence']>=config['name_threshold']
@@ -36,7 +49,7 @@ def check_summary(images,ocr,config):
     # independent groups, not just a Pokemon name or the word "summary".
     groups=(('おや','親'),('IDNO','IDナンバ'),('けいけんち','経験値'),('つぎのレベル','次のレベル'))
     anchors=[group[0] for group in groups if any(token in text for token in group)]
-    method='high_score_name';raw_name_rows=None
+    method='high_score_name';raw_name_rows=None;roi_rows=None
     if not name and config.get('name_verification')=='dual_screen_exact_uncorrected' and len(anchors)>=2:
         # Native Vision's CJK scores are discrete, not probabilities. A rare
         # species may be read exactly at .3 on BOTH screens. Do not lower the
@@ -50,9 +63,21 @@ def check_summary(images,ocr,config):
             raw_name_rows={key:ocr.read(images[key],correction=False) for key in ('0','1')}
             name=all(exact(raw_name_rows[key]) for key in ('0','1'))
             method='dual_screen_exact_uncorrected' if name else 'uncorrected_name_mismatch'
+        if not name and config.get('name_rois'):
+            # Full-screen Vision omits the white-on-green lower name on native
+            # USUM. Re-read only the configured name fields with appropriate
+            # contrast. Both names AND both uncorrected reads must be exact.
+            parts={key:name_roi_image(images[key],config['name_rois'][key]) for key in ('0','1')}
+            roi_rows={key:ocr.read(parts[key]) for key in ('0','1')}
+            method='name_roi_unconfirmed'
+            if all(exact(roi_rows[key]) for key in ('0','1')):
+                raw_name_rows={key:ocr.read(parts[key],correction=False) for key in ('0','1')}
+                name=all(exact(raw_name_rows[key]) for key in ('0','1'))
+                method='dual_screen_name_roi_uncorrected' if name else 'uncorrected_name_roi_mismatch'
     result=colour_verdict(images[str(config['colour']['screen'])],config['colour'])
     result.update(name_matched=name,context=anchors,rows=rows,name_verification=method)
     if raw_name_rows is not None:result['uncorrected_name_rows']=raw_name_rows
+    if roi_rows is not None:result['name_roi_rows']=roi_rows
     if not name or len(anchors)<2:result['verdict']='unknown'
     return result
 

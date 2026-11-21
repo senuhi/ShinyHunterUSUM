@@ -3,6 +3,35 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: native Poipole Summary name ROI fix (v1.4.3)
+
+The operator's next attempt reached the actual Poipole Summary. It sent 120
+navigation datagrams/reset zero and stopped as unknown. The colour patch was
+normal (distance .0718 versus shiny 1.031, red pixels zero, stddev 10.06), and the
+two experience-field anchors were strong. Identity failed: full-screen Vision
+omitted the lower white-on-green name entirely and read the correct upper label
+at .3. Thus the existing two-screen low-score fallback could not confirm identity.
+
+The two production profiles now include explicit name-field ROIs. If full-screen
+identity is insufficient, the lower crop is binarized/inverted with padding and
+the upper crop is converted to grayscale. Both exact names at .3 or better, both
+uncorrected exact reads and the existing two context groups are mandatory. This
+changes name-image preparation, not star coordinates, colour thresholds, sample
+consensus or final reset gates. Type: Null shares the expected Summary layout;
+its native crop recognition remains untested.
+
+Replaying the exact saved native Poipole pair through the actual local Vision
+helper and check_summary now returns NORMAL/name matched via both ROIs and both
+uncorrected reads. One measured full check took .823 s after warmup. This is an
+offline saved-image result, not three new frames or a physical reset approval.
+The saved native pair with a synthetic red marker added to a copy returned SHINY
+through the same actual OCR/classifier path. The original PNGs were unchanged;
+controller packets zero and reset_authorized false were recorded in private
+local replay evidence. All 111 offline/loopback tests passed (47.001 s). New regression cases cover
+missing full-screen names, both ROI names, a conflicting uncorrected crop, a
+wrong crop name, unchanged original pixels and an overriding red-star candidate.
+No new console connection/input/reset was performed by Codex.
+
 ## 2026-11-22: receipt OCR is navigation only (v1.4.2)
 
 After the HOME-side InputRedirection startup workaround, the operator reached a
