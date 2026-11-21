@@ -3,6 +3,38 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: native first-registration stop and bounded dialogue exit
+
+The first Poipole app attempt saved an unknown verdict on the Pokedex
+"registration complete" screen, not on Summary. It sent 69 navigation datagrams,
+zero resets and completed zero rounds. Local receipt OCR did identify the native
+Japanese completion phrase consistently. The ten-B cleanup interval expired
+while the first-registration animation was still running; later menu inputs
+therefore did not navigate to Summary. This attempt does not validate native
+normal/shiny Summary classification.
+
+v1.4.1 replaces that fixed ten-B prefix in the dedicated app with a bounded
+upstream-style B-until-dialogue-ended phase. Before X, three new upper frames
+must match this connection's passive saved-field baseline (RGB difference at
+most .05). B is limited to 60 presses/60 seconds; an unconfirmed return sends no
+menu navigation or reset. Summary identity/context/three-frame colour consensus
+and the final reset veto are unchanged. English and old diagnostics are unchanged.
+
+New regressions simulate registration requiring eighteen B presses and a
+registration timeout. All 108 offline/loopback tests passed (41.481 s), including
+the eleven app-specific tests. Native production
+GUI loopback normal still completed one round with 63 datagrams/reset one, and
+the red-star positive stopped with 54 datagrams/reset zero. These are synthetic
+screen tests with shortened timers, not new physical-console operations.
+
+The operator also reported Python disappearing. No matching Python/Vision crash
+report was found in the inspected DiagnosticReports folders; the reason for
+process termination remains unknown. The Finder launcher now enables Python
+faulthandler and retains stderr and the process exit code in ignored local
+captures/gui-*.log files. It does not auto-restart the app or reconnect the game.
+The registration correction must be tested from a new app process on the native
+pre-receipt save. No new console connection/input/reset was performed by Codex.
+
 ## 2026-11-21: v1.4 dedicated Japanese app loop completed in software
 
 The old template-driven Japanese route did not have native target assets and was

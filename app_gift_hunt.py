@@ -14,6 +14,7 @@ from gift_recognition import SafetyStop
 from mac_ocr import MacOCR
 from production_setup import PRODUCTION_TARGETS,preparation,summary_profile
 from summary_check import load_config
+from rehearsal import image_score
 from tppflush import LumaInputServer,CPAD_Commands
 
 
@@ -124,6 +125,32 @@ class AppGiftHunt(FixedDelivery):
             else:self.engine.stop.wait(.1)
         raise SafetyStop('日本語の受取完了が確認できません。リセットしません。')
 
+    def clear_receipt(self,timeout=60):
+        """Wait out first-time registration before opening the party menu.
+
+        Upstream advances with B until reception dialogue ends. A fixed ten B
+        presses can expire during the first Pokedex animation. Do not issue X
+        until three fresh upper frames match this connection's saved field.
+        """
+        if self.baseline is None:raise SafetyStop('受取前の開始画像がありません。')
+        end=time.monotonic()+timeout;serial=0;stable=0;presses=0;since=time.monotonic()
+        while time.monotonic()<end:
+            frames=self.ready();frame=frames['1']
+            if frame.serial<=serial or frame.started is None or frame.started<since:
+                self.engine.stop.wait(.03);continue
+            serial=frame.serial
+            score=image_score(frame.image,self.baseline['1'],[0,0,400,240])
+            self.engine.event('gift_dialogue_field_match',score=score,presses=presses)
+            if score<=.05:
+                stable+=1
+                if stable>=3:return
+                self.engine.stop.wait(.03);continue
+            stable=0
+            if presses>=60:raise SafetyStop('図鑑登録・会話の終了を確認できません。メニュー操作・リセットは送りません。')
+            self.click('B');presses+=1;since=time.monotonic()
+            self.wait(.5,'図鑑登録・会話の終了待ち')
+        raise SafetyStop('図鑑登録・会話の終了待ちが時間切れです。メニュー操作・リセットは送りません。')
+
     def summary_sample(self,frames,label):
         return super().summary_sample(frames,f'round-{self.engine.report.get("round",0):06d}-{label}')
 
@@ -141,12 +168,14 @@ class AppGiftHunt(FixedDelivery):
             self.ocr.read(self.ready()['1'].image,timeout=65)
             self.controller=LumaInputServer(e.console[0],e.input_port)
             while self.cycle_limit==0 or e.report['completed_cycles']<self.cycle_limit:
-                self.ready();self.actions=0;self.max_actions=80
+                self.ready();self.actions=0;self.max_actions=100
                 self.reset_sent=False;self.normal_summary_token=None
                 e.report['round']=e.report['completed_cycles']+1
                 e.status(f'{self.target_name} · {e.report["round"]}周目：受取を開始')
                 self.receive()
-                for button,delay in self.summary_sequence:
+                self.clear_receipt()
+                # The B cleanup prefix is now bounded by saved-field proof.
+                for button,delay in self.summary_sequence[10:]:
                     e.status(f'{e.report["round"]}周目：情報画面へ · {button}')
                     self.click(button);self.wait(delay,'画面の表示待ち')
                 verdict=self.observe_summary(time.monotonic())

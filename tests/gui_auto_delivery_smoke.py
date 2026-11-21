@@ -60,6 +60,7 @@ def main():
         if not expect_stop:expected += [int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
         delays=[];jitter_injected=[False]
         def native_image(screen,phase,tick):
+            if production and phase==13:phase=0  # registration/dialogue has ended
             image=Image.new('RGB',((320 if screen==0 else 400),240),(60+(tick%3),95,75))
             draw=ImageDraw.Draw(image)
             if screen==0:

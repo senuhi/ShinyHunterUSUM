@@ -19,7 +19,8 @@ class Game:
     def __init__(self,shiny=False):self.state=0;self.serial=0;self.shiny=shiny
     def snapshot(self,screen,**options):
         now=time.monotonic();self.serial+=1;state=self.state%ROUND
-        image=Image.new('RGB',((320 if screen==0 else 400),240),(30+state*4,70,90))
+        colour=(30,70,90) if state in (0,13) else (30,130+state*4,160)
+        image=Image.new('RGB',((320 if screen==0 else 400),240),colour)
         draw=ImageDraw.Draw(image);draw.rectangle((20,20,180,100),fill='white')
         if state==SUMMARY and screen==0:
             draw.rectangle((59,184,66,191),fill=(129,242,74))
@@ -109,7 +110,7 @@ class AppLoopTests(unittest.TestCase):
             e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
             ir=Controller(e.store)
             def wait(seconds,label):
-                if label=='画面の表示待ち':e.stop.set()
+                if label in ('画面の表示待ち','図鑑登録・会話の終了待ち'):e.stop.set()
             with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait',side_effect=wait):
                 runner.start(True,True,True,stop_at_summary=False,cycles=0);e.player.join(6)
             self.assertFalse(e.player.is_alive())
@@ -151,6 +152,37 @@ class AppLoopTests(unittest.TestCase):
             self.assertEqual(ir.down,[HIDButtons.A]*3)
             self.assertEqual(e.report['reset_attempts'],0)
             self.assertIn('低信頼度',e.report['status'])
+
+    def test_first_registration_needs_more_than_ten_b_before_menu(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+            # A long registration stays off-field for 18 B presses. Only then
+            # can three distinct field frames release the Summary navigation.
+            original=e.store.snapshot
+            def snapshot(screen,**options):
+                frame=original(screen,**options)
+                image=runner.baseline['1'].copy() if e.store.state>=18 else Image.new('RGB',frame.image.size,'blue')
+                return Frame(image,frame.serial,frame.received,frame.changed,frame.started)
+            e.store.snapshot=snapshot
+            runner.baseline=e.fixed_baseline;runner.actions=0;runner.max_actions=100
+            runner.controller=Controller(e.store)
+            with patch.object(runner,'wait'):
+                runner.clear_receipt()
+            self.assertEqual(runner.controller.down,[HIDButtons.B]*18)
+            self.assertEqual(e.report['reset_attempts'],0)
+            self.assertEqual(e.report['controller_packets'],54)
+
+    def test_registration_timeout_does_not_open_menu_or_reset(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+            runner.baseline={'1':e.fixed_baseline['1'].copy()}
+            runner.baseline['1'].paste('white',(0,120,400,240))
+            runner.actions=0;runner.max_actions=100;runner.controller=Controller(e.store)
+            with patch.object(runner,'wait'),self.assertRaises(SafetyStop):
+                runner.clear_receipt(timeout=.05)
+            self.assertTrue(runner.controller.down)
+            self.assertTrue(all(button==HIDButtons.B for button in runner.controller.down))
+            self.assertEqual(e.report['reset_attempts'],0)
 
     def test_start_guards_and_target_receipt_semantics(self):
         with tempfile.TemporaryDirectory() as td:
