@@ -3,6 +3,36 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: bound continuous-run diagnostic logs (v1.4.4)
+
+The operator asked whether growing upper/lower frame counters meant that all
+frames were being written to disk or could overflow. The implementation keeps
+latest screen images and Python integer counters; frame events contain timing
+and count metadata, not image data. Production PNG evidence already retains only
+ten completed normal rounds, plus the active round and fixed baseline/received/
+restored/failure images. Existing session directories are retained separately.
+
+A read-only check of the active native session found 887/886 received frames,
+37 PNGs (4,963,235 bytes), 279,566 bytes of event text and 5,247,794 total bytes.
+Its report was in round four, completed cycles three, reset attempts four. The
+prior sixteen session folders together used 15,580,503 bytes at that instant.
+This is a point-in-time observation, not a disk-usage limit or timing benchmark.
+
+The event JSONL previously appended without a size limit. v1.4.4 introduces an
+8MiB active-file budget and two rotated backups (24MiB total per new connection's
+event log). Whole UTF-8 JSON lines are rotated before writes. Oversized records
+and I/O failures propagate instead of silently disabling safety logging. The
+helper targets only event-log files, not candidate or failure images. This
+modifies disk diagnostics, not game control or classification. The current old
+app process is not hot-patched, restarted, disconnected or otherwise touched;
+the cap applies on its next ordinary launch. Old folders and launcher stderr
+logs are not retroactively deleted by this feature.
+
+Three new regressions cover Unicode byte budgets/backup count/record continuity,
+zero-backup mode/oversized event rejection, unrelated candidate preservation and
+I/O error propagation. All 114 offline/loopback tests passed (46.976 s).
+No console connection/input/reset was performed by Codex.
+
 ## 2026-11-22: first native Poipole normal round completed (v1.4.3)
 
 The operator ran the dedicated app and reported one round followed by a manual

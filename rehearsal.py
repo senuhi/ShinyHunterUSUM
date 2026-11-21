@@ -6,6 +6,7 @@ and a bounded cycle budget. Fixed navigation uses timed buttons; receipt/reset
 checks remain mandatory. No game-save or touch input exists.
 """
 import json
+from bounded_log import append_json_line
 import shutil
 import socket
 import tempfile
@@ -98,9 +99,8 @@ class Rehearsal:
 
     def event(self, kind, **details):
         with self.log_lock:
-            with (self.directory/'events.jsonl').open('a', encoding='utf-8') as f:
-                f.write(json.dumps(dict(event=kind, elapsed=time.monotonic()-self.started,
-                                        **details), ensure_ascii=False)+'\n')
+            append_json_line(self.directory/'events.jsonl',
+                             dict(event=kind,elapsed=time.monotonic()-self.started,**details))
 
     def status(self, text):
         self.report['status'] = text; self.notify('status', text)
