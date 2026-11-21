@@ -259,9 +259,10 @@ class Rehearsal:
                     raise SafetyStop('送信直前に画面が変わりました。入力しません。')
         self.pulse(name,controller)
 
-    def pulse(self, name, controller, before_send=None):
+    def pulse(self, name, controller, before_send=None, copies=1):
         """Existing Luma button transport, with no navigation image matching."""
         if name not in BUTTONS:raise SafetyStop('未対応の操作です。')
+        if type(copies) is not int or not 1<=copies<=3:raise SafetyStop('送信回数が不正です。')
         self.healthy()
         buttons = (HIDButtons.L, HIDButtons.R, HIDButtons.SELECT) if name=='RESET' else (getattr(HIDButtons, name),)
         for button in buttons: controller.press(button)
@@ -270,12 +271,14 @@ class Rehearsal:
             self.healthy()
             if before_send is not None:before_send()
             if name=='RESET': self.report['reset_attempts'] += 1
-            controller.send(print_sent=False); self.report['controller_packets'] += 1
+            for _ in range(copies):
+                controller.send(print_sent=False); self.report['controller_packets'] += 1
             self.stop.wait(.15 if name=='RESET' else .08)
         finally:
             try:
-                controller.clear_everything(); controller.send(print_sent=False)
-                self.report['controller_packets'] += 1
+                controller.clear_everything()
+                for _ in range(copies):
+                    controller.send(print_sent=False); self.report['controller_packets'] += 1
             finally:
                 controller.return_control(); self.report['controller_packets'] += 1
         self.event('input_completed', button=name)

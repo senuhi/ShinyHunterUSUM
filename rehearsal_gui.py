@@ -236,11 +236,13 @@ class RehearsalWindow(tk.Toplevel):
             stop_at_summary=self.stop_at_summary.get()
             if self.production:
                 from app_gift_hunt import AppGiftHunt
-                runner=AppGiftHunt(engine,'poipole' if self.target.get()=='ベベノム' else 'typenull_poni')
+                runner=AppGiftHunt(engine,'poipole' if self.target.get()=='ベベノム' else 'typenull_poni',
+                                   resume_directory=getattr(self.app,'resume_receipt_directory',None))
                 # The Start click is the explicit operation request. Save/start
                 # preconditions are checked; no repeated per-key approval.
                 runner.start(saved=self.saved.get(),approved=live,live=live,party_before=party,
                              stop_at_summary=stop_at_summary,cycles=self.cycle_limit.get())
+                if live:self.app.resume_receipt_directory=None
                 return
             runner=FixedDelivery(engine)
             if live and not engine.report.get('fixed_preflight_verified'):

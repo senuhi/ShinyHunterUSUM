@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 from chiruno_transport import packet, setup_packets
 from tppflush import HIDButtons
 from summary_check import summary_buttons
+from gift_navigation import ROOT as NAV_ROOT
 from USUMShinyHunter_GUI import ShinyHunterUSUM
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -31,10 +32,16 @@ def main():
         os.environ['USUM_DATA_DIR']=str(Path(td)/'settings')
         os.environ['USUM_CAPTURE_DIR']=str(Path(td)/'captures')
         production='--production' in sys.argv[1:]
+        packets_per_press=7 if production else 3
+        navigation_manifest=json.loads((NAV_ROOT/'manifest.json').read_text())
         null_target='--null' in sys.argv[1:]
         drop_start=production and '--drop-first-start' in sys.argv[1:]
+        resume_pending=production and '--resume-pending' in sys.argv[1:]
+        late_dialogue=production and '--late-dialogue' in sys.argv[1:]
+        pending_dialogue=[resume_pending];late_triggered=[False]
         target_name=('タイプ：ヌル' if null_target else 'ベベノム') if production else 'ピカチュウ'
         app=ShinyHunterUSUM()
+        if resume_pending:app.resume_receipt_directory=str(Path(td)/'previous')
         if production:app.OpenGiftHunt()
         else:app.OpenDiagnostics()
         app.update()
@@ -58,9 +65,12 @@ def main():
         expect_stop=only_summary or shiny_summary
         expected_verdict='shiny' if shiny_summary else 'normal'
         expected=[int(HIDButtons.A)]*(4 if drop_start else 3)+[int(getattr(HIDButtons,b)) for b,_ in nav]
+        if resume_pending:expected=[int(HIDButtons.B)]+[int(getattr(HIDButtons,b)) for b,_ in nav[10:]]
+        elif late_dialogue:expected[13:13]=[int(HIDButtons.X),int(HIDButtons.B)]
         if not expect_stop:expected += [int(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT),int(HIDButtons.START),int(HIDButtons.A)]
         delays=[];jitter_injected=[False]
         def native_image(screen,phase,tick):
+            dialogue_here=production and phase==13 and pending_dialogue[0]
             if production and phase==13:phase=0  # registration/dialogue has ended
             image=Image.new('RGB',((320 if screen==0 else 400),240),(60+(tick%3),95,75))
             draw=ImageDraw.Draw(image)
@@ -74,6 +84,18 @@ def main():
             elif phase>=4:
                 draw.text((20,80),'NO NAVIGATION MATCHING FIXTURE',fill='white')
             else:draw.rectangle((20,20,180,100),fill='white')
+            if dialogue_here and screen==1:
+                draw.rectangle((15,170,385,235),fill='white')
+                draw.text((25,184),'ありがとう アローラの人',font=font,fill='black')
+            if production and screen==0 and phase in (14,15,16):
+                kind='menu' if phase==14 else 'party'
+                for item in navigation_manifest['states'][kind]:
+                    with Image.open(NAV_ROOT/item['template']) as part:image.paste(part,item['box'][:2])
+                if phase in (15,16):
+                    x,y=(3,32) if phase==15 else (173,48)
+                    draw.rectangle((x,y,x+8,y+10),fill=(230,35,20))
+            if production and phase==17 and screen==0:
+                draw.text((60,150),'つよさをみる',font=font,fill='white')
             if phase==summary_phase:
                 image=Image.new('RGB',image.size,(129,242,74));draw=ImageDraw.Draw(image)
                 if screen==0:
@@ -89,7 +111,7 @@ def main():
                     if production:draw.text((20,20),target_name,font=font,fill='black')
                     draw.text((20,60),'けいけんち',font=font,fill='black')
                     draw.text((20,95),'つぎのレベルまで',font=font,fill='black')
-            if screen==0 and phase==0 and len(downs)>0:
+            if screen==0 and phase==0 and len(downs)>=len(expected):
                 # A real post-reset Rotom question differs from the map; the
                 # upper saved-location scene is the final return criterion.
                 image=Image.new('RGB',image.size,'#eac090')
@@ -120,20 +142,33 @@ def main():
             except Exception as error:
                 if not halted.is_set() and not (production and window.engine.stop.is_set()):errors.append(('stream',str(error)))
         def receive_inputs():
+            held=0
             try:
                 while not halted.is_set():
                     try:data,_=inputs.recvfrom(100)
                     except socket.timeout:continue
                     assert len(data)==20
-                    if data.hex()=='ff0f000000000002fff77f008100808000000000':continue
+                    if data.hex()=='ff0f000000000002fff77f008100808000000000':held=0;continue
                     assert data[16:]==bytes(4)
                     buttons=(~int.from_bytes(data[:4],'little')) & 0xffffffff
-                    if buttons:
+                    if not buttons:held=0
+                    if buttons and buttons!=held:
+                        held=buttons
                         assert len(downs)<len(expected) and buttons==expected[len(downs)],(downs,buttons)
                         downs.append(buttons)
-                        if not (drop_start and len(downs)==1):
+                        if late_dialogue and state[0]==13 and buttons==int(HIDButtons.X) and not late_triggered[0]:
+                            late_triggered[0]=True;pending_dialogue[0]=True
+                        elif state[0]==13 and pending_dialogue[0] and buttons==int(HIDButtons.B):
+                            pending_dialogue[0]=False
+                        elif not (drop_start and len(downs)==1):
                             with lock:state[0]=(state[0]+1)%(summary_phase+3)
             except Exception as error:errors.append(('input',str(error)))
+        if resume_pending:
+            previous=Path(td)/'previous';previous.mkdir()
+            for key in (0,1):native_image(key,0,0).save(previous/f'fixed-baseline-{key}.png')
+            native_image(1,3,0).save(previous/'received-message.png')
+            (previous/'report.json').write_text(json.dumps(dict(mode='app_gift_hunt',target="typenull_poni" if null_target else "poipole",round=1,completed_cycles=0,reset_attempts=0,summary_verdict='unknown',summary_scores={'context':[]})))
+            state[0]=13
         producer=threading.Thread(target=produce,daemon=True);consumer=threading.Thread(target=receive_inputs,daemon=True)
         producer.start();consumer.start()
         window.local.set('127.0.0.1:8001');window.console.set(f'127.0.0.1:{server.getsockname()[1]}')
@@ -158,7 +193,7 @@ def main():
                 phase[0]='live';window.auto_live_button.invoke()
             elif phase[0]=='live' and not engine.playing and (engine.report.get('summary_verdict')==expected_verdict if expect_stop else engine.report['completed_cycles']==1):
                 assert downs==expected
-                assert engine.report['reset_attempts']==(0 if expect_stop else 1) and engine.report['controller_packets']==len(expected)*3+(9 if production and null_target else 0)
+                assert engine.report['reset_attempts']==(0 if expect_stop else 1) and engine.report['controller_packets']==len(expected)*packets_per_press+(9 if production and null_target else 0)
                 assert engine.report['summary_verdict']==expected_verdict
                 assert engine.report['completed_cycles']==(0 if expect_stop else 1)
                 phase[0]='passed';halted.set();app.on_closing();return
@@ -175,12 +210,15 @@ def main():
         assert not errors,errors
         assert phase[0]=='passed',phase
         receipt_delays=([.1]*3 if null_target else [])+[1]*(4 if drop_start else 3) if production else [3]*3
-        assert delays==receipt_delays+[d for _,d in nav]+([] if expect_stop else [25,5,12]),delays
-        assert jitter_injected[0]
+        expected_delays=receipt_delays+[d for _,d in nav]
+        if resume_pending:expected_delays=[.5]+[d for _,d in nav[10:]]
+        elif late_dialogue:expected_delays=receipt_delays+[.5]*10+[2,.5]+[d for _,d in nav[10:]]
+        assert delays==expected_delays+([] if expect_stop else [25,5,12]),delays
+        if not resume_pending:assert jitter_injected[0]
         if drop_start:
             events=[json.loads(line) for line in (window.engine.directory/'events.jsonl').read_text().splitlines()]
             assert len([row for row in events if row['event']=='receipt_start_retry'])==1
-        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, verdict={expected_verdict}, resets={0 if expect_stop else 1}, delayed fractions, {len(expected)*3+(9 if production and null_target else 0)} datagrams; production={production}; missed_start={drop_start}; timers shortened; NO HARDWARE')
+        print(f'PASS: fixed GUI, loopback TCP/UDP, receipt and summary Vision, verdict={expected_verdict}, resets={0 if expect_stop else 1}, delayed fractions, {len(expected)*packets_per_press+(9 if production and null_target else 0)} datagrams; production={production}; missed_start={drop_start}; resume={resume_pending}; late_dialogue={late_dialogue}; timers shortened; NO HARDWARE')
 
 
 if __name__=='__main__':main()

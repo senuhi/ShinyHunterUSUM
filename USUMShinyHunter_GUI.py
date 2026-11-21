@@ -22,7 +22,7 @@ from Lotto   import *
 from Record  import *
 from ScreenPopup import ScreenPopup
 
-VERSION = '1.4.5-macos-ja-preview'
+VERSION = '1.5.0-macos-ja-preview'
 
 # Define the application class
 class ShinyHunterUSUM(tk.Tk):
@@ -524,7 +524,13 @@ if __name__ == '__main__':
             if target not in ('poipole', 'typenull_poni'):
                 raise ValueError('Unsupported gift target')
             app.Recv.recvvar.set(0 if target == 'poipole' else 1)
+        if '--resume-receipt' in sys.argv[1:]:
+            app.resume_receipt_directory = sys.argv[sys.argv.index('--resume-receipt')+1]
         app.OpenGiftHunt()
+        if getattr(app, 'resume_receipt_directory', None):
+            app.Diagnostics.title('受取後から復旧・日本語ギフト厳選')
+            app.Diagnostics.help_text.set('現在の受取個体を情報画面へ進め、通常色のみリセット。その後は通常周回へ戻ります。')
+            app.Diagnostics.saved_check.config(text='元の受取前セーブを上書きしていない／受取前1匹・現在の受取場所から再開')
         if '--cycles' in sys.argv[1:]:
             app.Diagnostics.cycle_limit.set(int(sys.argv[sys.argv.index('--cycles')+1]))
         if '--normal-reset' in sys.argv[1:]:

@@ -3,6 +3,70 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: observed navigation, repeated masks and pending-gift resume (v1.5)
+
+After four native rounds in the new session, round five reached its receipt,
+then B cleanup. Three field matches (.00519, .00545, .00500) were followed by X
+and the fixed A/right/A/A sequence. At the final sample the native upper screen
+still contained the NPC's thank-you dialogue and the lower map was dimmed. The
+app had not verified that X actually opened the menu. It stopped UNKNOWN with
+zero additional resets (four resets/four completed rounds, 675 datagrams). This
+may reflect a lost X, a late post-gift dialogue, or both; the wire logs cannot
+prove which. The candidate was left unclassified and was not reset.
+
+Review also found that upstream TabBase.click sends each down/up state three
+times, while the new app diagnostic transport had sent each only once. The
+production app now uses three identical down masks, three neutral masks and one
+return-control packet per logical press. The old/English diagnostic default
+remains unchanged. Reset authorization is counted once and the final normal
+veto remains before the first reset-down packet; repeated masks do not bypass it.
+
+Native static menu/party UI label crops (without trainer/Pokemon data) are now
+language-specific navigation assets. Both textured anchors must match; flat
+similar-colour backgrounds are rejected. Party selection checks the dominant red
+cursor/border at slots one/two. Lower Rotom frame colour ratios distinguish the
+map even when dimmed, and upper saved-field geometry distinguishes NPC dialogue
+from Summary. Summary arrival uses the existing information-field groups across
+both screens. The actual name, star and colour decision remains in the existing
+three-fresh-pair/final-check path.
+
+Navigation now observes before advancing: field→X, known menu→A, first party
+slot→right, second slot→A, known Summary context→A. Unchanged known states retry
+the appropriate input. A late NPC dialogue returns to B, then X; A is never
+blindly sent merely because two seconds elapsed after X. The navigation recovery
+has a 120-second/90-action limit and never uses reset. A genuine unrecognized
+state, unhealthy transport or undecidable Summary still stops without reset.
+
+An explicit --resume-receipt path can preserve the current pending gift across
+this software update. Before control, it validates source target, pending round,
+no reset of that round, receipt evidence, original field images and current
+site/map/dialogue. A source already shiny, reset, wrong-target or unknown on a
+real Summary is rejected. The first resumed round skips receive, navigates the
+existing individual to Summary, and may reset only after fresh NORMAL consensus;
+after its return, ordinary continuous reception resumes. Opening the recovery
+GUI sends nothing; the operator must Receive/Preflight/Start in the app.
+
+Validation:
+
+- 125 offline/loopback tests passed in one run (72.677 s). An additional source-
+  rejection regression and the resume normal/shiny test passed afterward (two
+  tests, 2.098 s). I/O/control/colour behavior did not change afterward; only
+  diagnostic text/report fields and documentation changed.
+- Regressions cover a lost X/menu A/right/party A/context A, late dialogue after X,
+  resuming an already-received normal/shiny gift, and rejection of unsafe sources.
+- Native Tk + local Vision + loopback Chiruno/Luma: ordinary normal round 147
+  datagrams/reset one; late-dialogue automatic recovery 161/reset one; pending
+  normal resume 63/reset one; pending shiny resume 42/reset zero. Timers shortened.
+- Saved native images classify as NPC dialogue, menu, first party slot and Summary.
+  The current dim map's red-frame mismatch is .00838 (limit .13); unrelated menu,
+  party and Summary mismatch >.84. This is saved-image evidence, not live control.
+- Native English GUI regression passed in dry-run with controller packets zero.
+
+No new console connection/input/reset was performed by Codex. The v1.5 recovery
+has not yet been run on this physical pending individual, and overnight stability
+has not been verified. Native shiny accuracy and native Type: Null Poni remain
+unverified. No fake calibration or hardware-validation attestation was issued.
+
 ## 2026-11-22: 17 native rounds, then unresponsive start (v1.4.5)
 
 The native continuous session completed seventeen normal rounds and seventeen

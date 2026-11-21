@@ -17,6 +17,7 @@ from rehearsal import image_score
 from production_setup import DEFAULT_PARTY_BEFORE
 
 class FixedDelivery(AutomaticDelivery):
+    button_copies=1
     def configuration(self):
         return load_config()
 
@@ -62,7 +63,7 @@ class FixedDelivery(AutomaticDelivery):
     def click(self,button):
         self.ready()
         if self.actions>=self.max_actions:raise SafetyStop('固定手順の操作上限です。')
-        self.actions+=1;self.engine.pulse(button,self.controller)
+        self.actions+=1;self.engine.pulse(button,self.controller,copies=self.button_copies)
 
     def enter_game(self):
         self.click('START');self.wait(5,'続行画面の読み込み待ち')
@@ -128,7 +129,7 @@ class FixedDelivery(AutomaticDelivery):
         self.actions+=1
         # No waiting for replacement frames after the final semantic check.
         # Recheck colour/header/freshness after log I/O, immediately before down.
-        self.engine.pulse('RESET',self.controller,before_send=final_guard)
+        self.engine.pulse('RESET',self.controller,before_send=final_guard,copies=self.button_copies)
 
     def wait_field(self,since):
         # Rotom may independently open a question after loading. It is not a

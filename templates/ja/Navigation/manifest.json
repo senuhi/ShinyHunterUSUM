@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "language": "Japanese",
+  "source": "Static UI labels from operator native USUM captures, 2026-11-14; no Pokemon or trainer data",
+  "threshold": 0.12,
+  "states": {
+    "menu": [
+      {
+        "box": [
+          52,
+          70,
+          126,
+          87
+        ],
+        "template": "menu-0.png"
+      },
+      {
+        "box": [
+          203,
+          70,
+          251,
+          87
+        ],
+        "template": "menu-1.png"
+      }
+    ],
+    "party": [
+      {
+        "box": [
+          103,
+          218,
+          195,
+          237
+        ],
+        "template": "party-0.png"
+      },
+      {
+        "box": [
+          238,
+          218,
+          315,
+          237
+        ],
+        "template": "party-1.png"
+      }
+    ]
+  }
+}

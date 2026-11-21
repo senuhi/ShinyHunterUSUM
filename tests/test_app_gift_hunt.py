@@ -11,9 +11,14 @@ from gift_recognition import SafetyStop
 from ntr_transport import Frame
 from rehearsal import Rehearsal
 from summary_check import summary_buttons
+from gift_navigation import NavigationAnchors,ROOT as NAV_ROOT
+import json
 from tppflush import HIDButtons
 
 NAV=summary_buttons(1);SUMMARY=3+len(NAV);ROUND=SUMMARY+3
+PACKETS=7
+NAV_MANIFEST=json.loads((NAV_ROOT/'manifest.json').read_text())
+FIELD_HUD=Image.open(NAV_ROOT.parent/'Diagnostics/field_hud.png').convert('RGB')
 
 class Game:
     def __init__(self,shiny=False):self.state=0;self.serial=0;self.shiny=shiny
@@ -21,7 +26,17 @@ class Game:
         now=time.monotonic();self.serial+=1;state=self.state%ROUND
         colour=(30,70,90) if state in (0,13) else (30,130+state*4,160)
         image=Image.new('RGB',((320 if screen==0 else 400),240),colour)
+        if screen==0 and state in (0,13):image.paste(FIELD_HUD,(0,0))
         draw=ImageDraw.Draw(image);draw.rectangle((20,20,180,100),fill='white')
+        if screen==0 and state in (14,15,16):
+            kind='menu' if state==14 else 'party'
+            for item in NAV_MANIFEST['states'][kind]:
+                with Image.open(NAV_ROOT/item['template']) as part:image.paste(part,item['box'][:2])
+            if state in (15,16):
+                x,y=(3,32) if state==15 else (173,48)
+                draw.rectangle((x,y,x+8,y+10),fill=(230,35,20))
+        if screen==1 and state==13 and getattr(self,'late_dialogue',False):
+            draw.rectangle((15,170,385,235),fill='white')
         if state==SUMMARY and screen==0:
             draw.rectangle((59,184,66,191),fill=(129,242,74))
             if self.shiny:draw.rectangle((47,188,52,193),fill=(210,55,15))
@@ -31,19 +46,21 @@ class OCR:
     def __init__(self,game,name):self.game=game;self.name=name
     def read(self,image,**options):
         phase=self.game.state%ROUND
-        if phase==0:return []
+        if phase in (0,13):return []
         if phase in (1,2):texts=[self.name+'を受け取りますか？']
         elif phase==3:texts=[self.name+'をもらった！']
+        elif phase==17:texts=['つよさをみる']
         elif phase==SUMMARY:texts=[self.name,'現在の経験値','次のレベルまで']
         else:raise AssertionError('No navigation OCR after receipt')
         return [{'text':s,'confidence':1} for s in texts]
     def close(self):pass
 
 class Controller:
-    def __init__(self,game):self.game=game;self.mask=0;self.last=0;self.down=[];self.socket=Mock();self.moves=[]
+    def __init__(self,game):self.game=game;self.mask=0;self.last=0;self.sent_mask=0;self.down=[];self.socket=Mock();self.moves=[]
     def press(self,button):self.mask|=button
     def send(self,print_sent=False):
-        if self.mask:self.down.append(self.mask);self.last=self.mask
+        if self.mask and self.mask!=self.sent_mask:self.down.append(self.mask);self.last=self.mask
+        self.sent_mask=self.mask
     def clear_everything(self):self.mask=0
     def return_control(self):
         if self.last:self.game.state+=1;self.last=0
@@ -70,7 +87,7 @@ class AppLoopTests(unittest.TestCase):
                 e=self.engine(td);ir,runner=self.run_case(e,target,cycles=2)
                 self.assertEqual(e.report['completed_cycles'],2,e.report)
                 self.assertEqual(e.report['reset_attempts'],2)
-                self.assertEqual(e.report['controller_packets'],(len(NAV)+6)*6+(18 if target=='typenull_poni' else 0))
+                self.assertEqual(e.report['controller_packets'],(len(NAV)+6)*PACKETS*2+(18 if target=='typenull_poni' else 0))
                 self.assertEqual(len(ir.moves),6 if target=='typenull_poni' else 0)
                 self.assertTrue(e.stop.is_set())
                 self.assertEqual(e.report['summary_verdict'],'normal')
@@ -92,15 +109,13 @@ class AppLoopTests(unittest.TestCase):
 
     def test_final_shiny_pixels_revoke_normal_reset_in_app_mode(self):
         with tempfile.TemporaryDirectory() as td:
-            e=self.engine(td);ocr=OCR(e.store,'ベベノム');original=ocr.read;summary_reads=[0]
-            def read(image,**options):
-                rows=original(image,**options)
-                if e.store.state%ROUND==SUMMARY:
-                    summary_reads[0]+=1
-                    if summary_reads[0]==6:e.store.shiny=True
-                return rows
-            ocr.read=read
-            ir,_=self.run_case(e,ocr=ocr)
+            e=self.engine(td);original=e.event
+            def event(kind,**details):
+                original(kind,**details)
+                if kind=='summary_verdict' and details.get('phase','').endswith('summary-3'):
+                    e.store.shiny=True
+            e.event=event
+            ir,_=self.run_case(e)
             self.assertEqual(e.report['reset_attempts'],0)
             self.assertEqual(e.report['summary_verdict'],'shiny')
             self.assertIn('送信直前',e.report['status'])
@@ -199,7 +214,7 @@ class AppLoopTests(unittest.TestCase):
             self.assertEqual(e.report['completed_cycles'],1,e.report)
             self.assertEqual(e.report['reset_attempts'],1)
             self.assertEqual(ir.down[:4],[HIDButtons.A]*4)
-            self.assertEqual(e.report['controller_packets'],(len(NAV)+7)*3)
+            self.assertEqual(e.report['controller_packets'],(len(NAV)+7)*PACKETS)
 
     def test_persistently_unresponsive_start_is_bounded_and_never_resets(self):
         with tempfile.TemporaryDirectory() as td:
@@ -234,6 +249,82 @@ class AppLoopTests(unittest.TestCase):
             self.assertEqual(ir.down,[HIDButtons.A]*2)
             self.assertEqual(e.report['reset_attempts'],0)
 
+    def test_late_dialogue_after_x_recovers_without_blind_menu_a(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+            class LateDialogue(Controller):
+                def __init__(self,game):super().__init__(game);self.failed=False
+                def return_control(self):
+                    if self.last==HIDButtons.X and not self.failed:
+                        self.failed=True;self.game.late_dialogue=True;self.last=0
+                    elif self.last==HIDButtons.B and self.game.late_dialogue:
+                        self.game.late_dialogue=False;self.last=0
+                    super().return_control()
+            e.store.late_dialogue=False;ir=LateDialogue(e.store)
+            with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                runner.start(True,True,True,stop_at_summary=False);e.player.join(12)
+            self.assertFalse(e.player.is_alive())
+            self.assertEqual(e.report['completed_cycles'],1,e.report)
+            self.assertEqual(e.report['reset_attempts'],1)
+            index=ir.down.index(HIDButtons.X)
+            self.assertEqual(ir.down[index:index+4],[HIDButtons.X,HIDButtons.B,HIDButtons.X,HIDButtons.A])
+            self.assertEqual(e.report['controller_packets'],(len(NAV)+8)*PACKETS)
+
+    def test_dropped_navigation_press_is_retried_in_its_observed_state(self):
+        for phase in (13,14,15,16,17):
+            with self.subTest(phase=phase),tempfile.TemporaryDirectory() as td:
+                e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+                class DropAtPhase(Controller):
+                    def __init__(self,game):super().__init__(game);self.dropped=False
+                    def return_control(self):
+                        if self.game.state==phase and not self.dropped:
+                            self.dropped=True;self.last=0
+                        super().return_control()
+                ir=DropAtPhase(e.store)
+                with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                    runner.start(True,True,True,stop_at_summary=False);e.player.join(12)
+                self.assertFalse(e.player.is_alive())
+                self.assertEqual(e.report['completed_cycles'],1,e.report)
+                self.assertEqual(e.report['reset_attempts'],1)
+                self.assertEqual(e.report['controller_packets'],(len(NAV)+7)*PACKETS)
+
+    def test_resume_pending_gift_does_not_reset_or_receive_before_summary(self):
+        for shiny in (False,True):
+            with self.subTest(shiny=shiny),tempfile.TemporaryDirectory() as td:
+                e=self.engine(td,shiny);source=Path(td)/'previous';source.mkdir()
+                for key in ('0','1'):e.store.snapshot(int(key)).image.save(source/f'fixed-baseline-{key}.png')
+                (source/'received-message.png').write_bytes(b'receipt evidence')
+                (source/'report.json').write_text(json.dumps(dict(mode='app_gift_hunt',target='poipole',round=1,completed_cycles=0,reset_attempts=0,summary_verdict='unknown',summary_scores={'context':[]})))
+                e.store.state=13;e.store.late_dialogue=True
+                runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2)
+                class ClearDialogue(Controller):
+                    def return_control(self):
+                        if self.last==HIDButtons.B and self.game.late_dialogue:
+                            self.game.late_dialogue=False;self.last=0
+                        super().return_control()
+                ir=ClearDialogue(e.store)
+                with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                    runner.start(True,True,True,stop_at_summary=False);e.player.join(10)
+                self.assertFalse(e.player.is_alive())
+                self.assertEqual(ir.down[0],HIDButtons.B)
+                self.assertEqual(e.report['summary_verdict'],'shiny' if shiny else 'normal',e.report)
+                self.assertEqual(e.report['reset_attempts'],0 if shiny else 1)
+                self.assertEqual(e.report['completed_cycles'],0 if shiny else 1)
+
+    def test_resume_rejects_shiny_summary_and_already_reset_sources(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);source=Path(td)/'previous';source.mkdir()
+            (source/'received-message.png').write_bytes(b'receipt')
+            base=dict(mode='app_gift_hunt',target='poipole',round=1,completed_cycles=0,reset_attempts=0,summary_verdict='unknown',summary_scores={'context':[]})
+            for change in ({'summary_verdict':'shiny'},{'reset_attempts':1},{'summary_scores':{'context':['経験値','次のレベル']}},{'target':'typenull_poni'}):
+                with self.subTest(change=change):
+                    (source/'report.json').write_text(json.dumps(dict(base,**change)))
+                    runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2)
+                    with patch('app_gift_hunt.LumaInputServer') as ir,self.assertRaises(SafetyStop):
+                        runner.start(True,True,True,stop_at_summary=False)
+                    ir.assert_not_called()
+                    self.assertEqual(e.report['controller_packets'],0)
+
     def test_first_registration_needs_more_than_ten_b_before_menu(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td);runner=AppGiftHunt(e);runner.start();e.player.join(2)
@@ -251,7 +342,7 @@ class AppLoopTests(unittest.TestCase):
                 runner.clear_receipt()
             self.assertEqual(runner.controller.down,[HIDButtons.B]*18)
             self.assertEqual(e.report['reset_attempts'],0)
-            self.assertEqual(e.report['controller_packets'],54)
+            self.assertEqual(e.report['controller_packets'],18*PACKETS)
 
     def test_registration_timeout_does_not_open_menu_or_reset(self):
         with tempfile.TemporaryDirectory() as td:
