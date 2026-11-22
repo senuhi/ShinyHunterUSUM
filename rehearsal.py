@@ -6,6 +6,7 @@ and a bounded cycle budget. Fixed navigation uses timed buttons; receipt/reset
 checks remain mandatory. No game-save or touch input exists.
 """
 import json
+import hashlib
 from bounded_log import append_json_line
 import shutil
 import socket
@@ -91,6 +92,7 @@ class Rehearsal:
         self.video_recovery_timeout=90;self.video_recovery_limit=5
         self.video_recovery_error=None;self.video_recovery_lock=threading.Lock()
         self.video_recovery_attempts=0
+        self.frozen_reference={}
         self.latest = {}; self.counts = {0: 0, 1: 0}; self.started = time.monotonic()
         self.trace = dict(schema=1, kind='delivery_rehearsal', backend=backend, quality=50,
                           shiny_classification=False, steps=[])
@@ -153,6 +155,10 @@ class Rehearsal:
             if not self.video_recovering.is_set():
                 self.video_pause_started=time.monotonic();self.video_recovery_error=str(error)
                 self.video_recovery_attempts=0
+                self.frozen_reference={}
+                if 'Frozen screen' in str(error) and isinstance(self.store,FrameStore):
+                    with self.store.lock:
+                        self.frozen_reference={s:hashlib.sha256(f.image.tobytes()).digest() for s,f in self.store.frames.items()}
                 self.video_recovering.set()
                 self.report['video_recovering']=True
                 self.event('video_input_paused',error=str(error),generation=self.video_generation)
@@ -182,8 +188,10 @@ class Rehearsal:
 
     def _resume_video_if_ready(self,counts):
         if not self.video_recovering.is_set() or self.video_recovery_error is not None or min(counts.values())<2:return
-        try:self._transport_frames(check_origin=True)
+        try:frames=self._transport_frames(check_origin=True)
         except OSError:return
+        if self.frozen_reference and not any(hashlib.sha256(frame.image.tobytes()).digest()!=self.frozen_reference.get(int(key)) for key,frame in frames.items()):
+            return  # New TCP timestamps do not make the same frozen picture live.
         with self.video_recovery_lock:
             self.video_paused_total+=time.monotonic()-self.video_pause_started
             self.video_recovering.clear();self.report['video_recovering']=False

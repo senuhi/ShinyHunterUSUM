@@ -302,6 +302,12 @@ class AppGiftHunt(FixedDelivery):
             if upper.serial<=serial:self.engine.stop.wait(.03);continue
             serial=upper.serial
             if image_score(upper.image,self.baseline['1'],[0,0,400,240])<=.05:return
+            # A freshly confirmed/sent reset already establishes the boot path.
+            # Do not block the first harmless START on an animated logo match.
+            if attempts==0 and self.reset_sent:
+                if self.click('START'):
+                    attempts+=1;self.wait(3,'タイトル・続行画面から復帰中')
+                continue
             state='unknown'
             for stage in ('title','continue'):
                 if screen_stage(upper.image,stage)[0]:state=stage;break

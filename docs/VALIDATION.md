@@ -3,6 +3,28 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: physical freeze reported; reboot retry preparation (v1.6.1)
+
+The new native session completed five rounds and sent its sixth normal-guarded
+reset. At the title both decoded images then remained identical for at least
+fifteen seconds. Four actual video reattachments received completed images but
+no visual motion; no START was sent because the animated-title template scored
+.14687 against a .1 limit. The operator also reported a static physical screen
+and no response to physical START. This supports a game/console-side stall, not
+merely a Mac display problem, but does not identify ChirunoMod, USUM, Luma or
+previous overnight uptime as the cause. The operator is rebooting to retry.
+
+After a confirmed and sent normal reset, the app now sends the first START once
+fresh video is available, without requiring the animated logo crop to match.
+Continue/return checks and every normal/shiny/reset guard remain. Recovery from
+Frozen-screen errors now requires actual pixel change on at least one screen,
+instead of treating new TCP timestamps on the same frozen picture as recovery.
+Nine focused regressions passed (17.366 s), including unmatchable title artwork,
+both routes' multi-round loops, shiny zero-reset, and cached frozen-image veto.
+These software changes do not claim to repair the reported physical freeze.
+The reboot retry has not yet started; the configured cycle-zero app is waiting
+unconnected for the operator's console-ready state/IP confirmation.
+
 ## 2026-11-22: video-only recovery instead of terminating the hunt (v1.6)
 
 The native session that started at about 11:28 JST completed eighteen normal

@@ -54,6 +54,19 @@ class VideoRecoveryTests(unittest.TestCase):
                 self.assertFalse(runner.click('A'))
             self.assertEqual(ir.packets,[])
 
+    def test_same_frozen_picture_after_reconnect_is_not_resumed(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);e.video_recovery_enabled=True
+            for screen,width in ((0,320),(1,400)):
+                now=time.monotonic();e.store.put(screen,Image.new('RGB',(width,240),'green'),now,now)
+            e.request_video_recovery(OSError('Frozen screen 1'));e.video_recovery_error=None
+            e._resume_video_if_ready({0:2,1:2})
+            self.assertTrue(e.video_recovering.is_set())
+            now=time.monotonic();e.store.put(0,Image.new('RGB',(320,240),'blue'),now,now)
+            e._resume_video_if_ready({0:2,1:2})
+            self.assertFalse(e.video_recovering.is_set())
+            self.assertEqual(e.report['controller_packets'],0)
+
     def test_legacy_transport_still_stops_and_keeps_original_error(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td)

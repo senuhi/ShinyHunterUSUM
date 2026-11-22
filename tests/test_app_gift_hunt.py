@@ -135,6 +135,20 @@ class AppLoopTests(unittest.TestCase):
             self.assertEqual(e.report['summary_verdict'],'shiny')
             self.assertNotIn(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,ir.down)
 
+    def test_confirmed_reset_sends_first_start_without_matching_animated_logo(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);original=e.store.snapshot
+            def snapshot(screen,**options):
+                frame=original(screen,**options)
+                if screen==1 and e.store.state%ROUND==SUMMARY+1:
+                    frame.image.paste((250,220,15),(0,0,400,240))
+                return frame
+            e.store.snapshot=snapshot
+            ir,_=self.run_case(e)
+            self.assertEqual(e.report['completed_cycles'],1,e.report)
+            self.assertEqual(ir.down.count(HIDButtons.START),1)
+            self.assertEqual(e.report['reset_attempts'],1)
+
     def test_info_stop_default_has_no_reset(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td);self.run_case(e,stop=True)
