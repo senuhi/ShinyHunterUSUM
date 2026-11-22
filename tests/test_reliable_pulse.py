@@ -21,6 +21,16 @@ class ReliablePulseTests(unittest.TestCase):
             self.assertEqual(ir.packets,[HIDButtons.A]*3+[0]*3+['return'])
             self.assertEqual(e.report['controller_packets'],7)
 
+    def test_packet_counter_crosses_ten_thousand_and_machine_integer_size(self):
+        for start in (9999,2**63-1):
+            with self.subTest(start=start),tempfile.TemporaryDirectory() as td:
+                e=Rehearsal('ChirunoMod',('127.0.0.1',8001),('127.0.0.1',6464),4950,td)
+                e.healthy=lambda:{};e.report['controller_packets']=start;ir=Controller()
+                e.pulse('A',ir,copies=3)
+                self.assertEqual(e.report['controller_packets'],start+7)
+                self.assertEqual(ir.packets,[HIDButtons.A]*3+[0]*3+['return'])
+                self.assertFalse(e.stop.is_set())
+
     def test_final_guard_failure_cannot_send_any_repeated_reset_down(self):
         with tempfile.TemporaryDirectory() as td:
             e=Rehearsal('ChirunoMod',('127.0.0.1',8001),('127.0.0.1',6464),4950,td)

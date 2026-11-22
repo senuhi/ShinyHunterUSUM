@@ -152,6 +152,7 @@ class RehearsalWindow(tk.Toplevel):
             self.engine=Rehearsal(self.backend.get(),endpoint(self.local.get(),8001),
                 console_endpoint(self.console.get(),self.backend.get()),port,self.app.General.shotpath,
                 lambda kind,value:self.events.put((kind,value)))
+            self.engine.video_recovery_enabled=self.production
             general=self.app.General
             for entry,value in ((general.IPPC.Entry,self.local.get()),(general.IPDS.Entry,self.console.get())):
                 entry.delete(0,'end');entry.insert(0,value)

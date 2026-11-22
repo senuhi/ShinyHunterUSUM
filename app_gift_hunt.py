@@ -11,7 +11,7 @@ import re
 import sys
 import time
 from automatic_delivery import DIALOGUE_BOX,normalized,screen_stage
-from fixed_delivery import FixedDelivery
+from fixed_delivery import FixedDelivery,SummarySampleExpired
 from gift_recognition import SafetyStop
 from mac_ocr import MacOCR
 from production_setup import PRODUCTION_TARGETS,preparation,summary_profile
@@ -28,6 +28,7 @@ class AppGiftHunt(FixedDelivery):
         if target not in PRODUCTION_TARGETS:raise SafetyStop('本番対象はベベノム／ヌル・ポニです。')
         self.resume_directory=Path(resume_directory).expanduser().resolve() if resume_directory else None
         self.resume_pending=self.resume_directory is not None
+        self.resume_summary_pending=False
         self.target=target;self.route=preparation()['targets'][target]
         self.target_name=self.route['name'];self.cycle_limit=1;self.receipt_timeout=75
         self.start_retry_interval=2.0;self.max_start_retries=3
@@ -35,7 +36,19 @@ class AppGiftHunt(FixedDelivery):
 
     def configuration(self):return load_config(summary_profile(self.target))
 
+    @staticmethod
+    def expired_summary_source(source):
+        return (source.get('summary_verdict') is None and
+                source.get('summary_round')==source.get('round') and
+                source.get('received_round')==source.get('round') and
+                not source.get('summary_candidate_preserved') and
+                (source.get('failure_cause')=='情報画面の判定中に映像が古くなりました。リセットしません。' or
+                 (source.get('summary_expired_samples',0)>0 and source.get('failure_cause')=='情報画面の判定が時間内に揃いません。リセットしません。')))
+
     def pending_receipt_source(self,source):
+        if source.get('summary_candidate_preserved') or source.get('summary_verdict')=='shiny':return False
+        if self.expired_summary_source(source):return True
+        if source.get('summary_verdict')=='unknown' and source.get('summary_round')==source.get('round'):return False
         if source.get('summary_verdict')=='unknown' and not source.get('summary_scores',{}).get('context'):return True
         # Older releases left the previous round's NORMAL result in the report.
         # Require journal evidence that the new receipt happened after its reset.
@@ -68,6 +81,7 @@ class AppGiftHunt(FixedDelivery):
                 not self.pending_receipt_source(source) or
                 not (self.resume_directory/'received-message.png').exists()):
                 raise SafetyStop('受取後の中断記録を安全に引き継げません。リセットしません。')
+            self.resume_summary_pending=self.expired_summary_source(source)
             baseline={}
             for key,size in (('0',(320,240)),('1',(400,240))):
                 with Image.open(self.resume_directory/f'fixed-baseline-{key}.png') as image:
@@ -287,7 +301,7 @@ class AppGiftHunt(FixedDelivery):
         for _ in range(3):
             resets=self.engine.report['reset_attempts']
             try:return super().reset_from_summary()
-            except VideoRecoveryPending:
+            except (VideoRecoveryPending,SummarySampleExpired):
                 if self.engine.report['reset_attempts']!=resets:return  # Never replay a sent reset.
                 self.reset_sent=False;self.normal_summary_token=None
                 self.ready()
@@ -342,19 +356,25 @@ class AppGiftHunt(FixedDelivery):
                 self.ready();self.actions=0;self.max_actions=180
                 self.reset_sent=False;self.normal_summary_token=None
                 e.report['round']=e.report['completed_cycles']+1
-                for key in ('summary_verdict','summary_scores','summary_round','received_round'):e.report.pop(key,None)
+                for key in ('summary_verdict','summary_scores','summary_round','received_round','summary_expired_samples'):e.report.pop(key,None)
                 e.status(f'{self.target_name} · {e.report["round"]}周目：受取を開始')
                 resuming=self.resume_pending
                 if resuming:
                     e.report['resumed_from']=str(self.resume_directory)
+                    e.report['received_round']=e.report['round']
                     e.event('resume_pending_receipt',source=str(self.resume_directory))
                     self.resume_pending=False
                     e.status('受取済みの個体を引き継ぎ、情報画面へ復旧しています。')
                 else:self.receive()
-                self.clear_receipt()
-                if self.navigate_summary(allow_reception_restart=resuming) is False:
+                if resuming and self.resume_summary_pending:
+                    e.report['resumed_at_summary']=True
+                    e.status('時間切れで未判定の個体を、操作せず新しい情報画面から判定し直します。')
+                    self.resume_summary_pending=False
+                else:
                     self.clear_receipt()
-                    self.receive();self.clear_receipt();self.navigate_summary()
+                    if self.navigate_summary(allow_reception_restart=resuming) is False:
+                        self.clear_receipt()
+                        self.receive();self.clear_receipt();self.navigate_summary()
                 verdict=self.observe_summary(time.monotonic())
                 e.report['fixed_preflight_verified']=False
                 if verdict=='shiny':

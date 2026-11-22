@@ -16,6 +16,9 @@ from summary_check import check_summary,load_config,summary_buttons
 from rehearsal import image_score,VideoRecoveryPending
 from production_setup import DEFAULT_PARTY_BEFORE
 
+class SummarySampleExpired(Exception):
+    """Discard an aged OCR result and obtain new evidence; never authorize reset."""
+
 class FixedDelivery(AutomaticDelivery):
     button_copies=1
     def configuration(self):
@@ -81,9 +84,20 @@ class FixedDelivery(AutomaticDelivery):
     def summary_sample(self,frames,label):
         e=self.engine
         result=check_summary({key:frame.image for key,frame in frames.items()},self.ocr,self.summary_config)
-        e.healthy()
-        if any(time.monotonic()-(f.started if f.started is not None else f.received)>2 for f in frames.values()):
+        ages={key:time.monotonic()-(f.started if f.started is not None else f.received) for key,f in frames.items()}
+        if any(age>2 for age in ages.values()):
+            if e.video_recovery_enabled:
+                e.report['summary_expired_samples']=e.report.get('summary_expired_samples',0)+1
+                e.event('summary_sample_expired',phase=label,ages=ages,serials={k:f.serial for k,f in frames.items()})
+                # A potential shiny must be retained even if OCR took too long.
+                if result.get('verdict')=='shiny' or result.get('star_evidence',{}).get('red_pixels',0):
+                    for key,frame in frames.items():frame.image.save(e.directory/f'{label}-expired-candidate-{key}.png')
+                    e.report['summary_verdict']=result['verdict'];e.report['summary_scores']=result
+                    e.report['summary_candidate_preserved']=True;e.notify('summary',result)
+                    raise SafetyStop('古い画像に色違いの可能性があります。個体を残して停止します。')
+                raise SummarySampleExpired('情報画面の画像を取り直します。')
             raise SafetyStop('情報画面の判定中に映像が古くなりました。リセットしません。')
+        e.healthy()
         for key,frame in frames.items():frame.image.save(e.directory/f'{label}-{key}.png')
         e.event('summary_verdict',phase=label,profile_sha256=self.summary_config['digest'],
                 serials={key:f.serial for key,f in frames.items()},**result)
@@ -102,7 +116,7 @@ class FixedDelivery(AutomaticDelivery):
                 self.engine.stop.wait(.03);continue
             serials={key:f.serial for key,f in frames.items()}
             try:verdict=self.summary_sample(frames,f'summary-{len(verdicts)+1}')
-            except VideoRecoveryPending:
+            except (VideoRecoveryPending,SummarySampleExpired):
                 verdicts=[];serials={};continue
             if generation!=self.engine.video_generation:
                 verdicts=[];serials={};continue

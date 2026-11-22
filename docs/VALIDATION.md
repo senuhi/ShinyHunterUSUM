@@ -3,6 +3,43 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: packet 10000 coincidence and expired Summary OCR (v1.6.2)
+
+The rebooted native run completed thirty-one normal rounds and eight video
+reattachments, then stopped before any valid Summary verdict for round thirty-two.
+The visible counter was exactly 10000, but there is no packet-count cap: the full
+journal contains 1428 completed logical presses (seven datagrams each), and one
+cancelled press whose neutral-release path sent four datagrams: 1428*7+4=10000.
+Regression tests also send through 9999 -> 10006 and past 2**63-1 without stopping.
+
+The actual failure was the snapshot captured before OCR exceeding two seconds
+while OCR ran. The receiver was still supplying fresh complete frames. This
+expired computation used to terminate the worker. Production now discards its
+normal/negative result and clears consensus, then rereads fresh images; final-
+reset OCR expiration also requires a new three-pair consensus and final guard.
+Expired images with a red/shiny possibility are retained and stop the hunt.
+Neither the two-second freshness rule nor the colour/reset criteria was relaxed.
+The former run's unclassified thirty-second individual was explicitly resumed
+at Summary: no game input before fresh classification, then NORMAL three times
+and final NORMAL, RESET, START, continue and saved-field return. The next ordinary
+round proceeded and reached its own normal/reset. The new GUI session counter
+starts at zero because it is a new connection; this is not a counter-limit fix.
+
+During recovery setup, the static upper Summary screen also exposed an old
+per-screen freeze check. The production receiver now applies its fifteen-second
+freeze test to the pair: one static upper screen with a moving lower model is
+valid, while both static remains a recovery/stop condition. Frame origin/assembly
+limits remain two seconds for both screens. Production recovery is enabled from
+Receive, before passive preflight; legacy diagnostics retain their old policy.
+
+All 144 regressions passed (102.282 s) before the paired-freeze addition. Its
+27 affected receiver/fixed/rehearsal tests then passed (20.090 s), including the
+new static-upper/frozen-pair case; the current suite has 145 methods. New tests
+cover initial/final expired OCR, normal-to-shiny changes, expired shiny retention,
+direct Summary recovery with zero navigation input, true-unknown source rejection
+and packet counters across 10000 and machine-integer size. Native actual shiny
+and indefinite thousands-round reliability remain unverified.
+
 ## 2026-11-22: physical freeze reported; reboot retry preparation (v1.6.1)
 
 The new native session completed five rounds and sent its sixth normal-guarded

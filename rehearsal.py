@@ -249,7 +249,15 @@ class Rehearsal:
 
     def _transport_frames(self,check_origin):
         if self.stop.is_set():raise SafetyStop('受信が停止しています。再接続してください。')
-        return {str(s):self.store.snapshot(s,max_age=2,max_span=2,freeze_timeout=15,check_origin=check_origin) for s in (0,1)}
+        frames={str(s):self.store.snapshot(s,max_age=2,max_span=2,
+                freeze_timeout=float('inf') if self.video_recovery_enabled else 15,
+                check_origin=check_origin) for s in (0,1)}
+        # The upper Summary page is intentionally static; the lower model moves.
+        # A frozen pair, not one static screen, indicates stopped game/video.
+        now=self.store.clock() if isinstance(self.store,FrameStore) else time.monotonic()
+        if self.video_recovery_enabled and all(now-f.changed>15 for f in frames.values()):
+            raise OSError('Frozen screens 0/1')
+        return frames
 
     def transport_healthy(self):
         """Receiver-only check. Input always retains the stricter origin limit."""

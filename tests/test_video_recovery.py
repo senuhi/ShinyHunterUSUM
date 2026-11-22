@@ -54,6 +54,22 @@ class VideoRecoveryTests(unittest.TestCase):
                 self.assertFalse(runner.click('A'))
             self.assertEqual(ir.packets,[])
 
+    def test_static_upper_summary_is_valid_while_lower_model_changes(self):
+        from ntr_transport import FrameStore
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);e.video_recovery_enabled=True;clock=[0.0];e.store=FrameStore(lambda:clock[0])
+            for screen,width in ((0,320),(1,400)):e.store.put(screen,Image.new('RGB',(width,240),'green'),0,0)
+            clock[0]=20
+            e.store.put(1,Image.new('RGB',(400,240),'green'),20,20)
+            e.store.put(0,Image.new('RGB',(320,240),'blue'),20,20)
+            self.assertEqual(set(e.healthy()),{'0','1'})
+            self.assertFalse(e.video_recovering.is_set())
+            clock[0]=36
+            e.store.put(1,Image.new('RGB',(400,240),'green'),36,36)
+            e.store.put(0,Image.new('RGB',(320,240),'blue'),36,36)
+            with self.assertRaises(VideoRecoveryPending):e.healthy()
+            self.assertTrue(e.video_recovering.is_set())
+
     def test_same_frozen_picture_after_reconnect_is_not_resumed(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td);e.video_recovery_enabled=True

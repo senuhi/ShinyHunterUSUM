@@ -149,6 +149,86 @@ class AppLoopTests(unittest.TestCase):
             self.assertEqual(ir.down.count(HIDButtons.START),1)
             self.assertEqual(e.report['reset_attempts'],1)
 
+    def test_expired_summary_is_discarded_and_fresh_colour_controls_reset(self):
+        for next_shiny in (False,True):
+            with self.subTest(next_shiny=next_shiny),tempfile.TemporaryDirectory() as td:
+                e=self.engine(td);calls=0
+                from summary_check import check_summary as checker
+                def check(images,ocr,config):
+                    nonlocal calls
+                    result=checker(images,ocr,config);calls+=1
+                    if calls==1:
+                        expired_once[0]=True;e.store.shiny=next_shiny
+                    return result
+                # Snapshot mutation happens after ready(), during OCR.
+                expired_once=[False]
+                ir=Controller(e.store);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+                real_sample=runner.summary_sample
+                def sample(frames,label):
+                    if not expired_once[0]:
+                        frames={k:Frame(f.image,f.serial,f.received,f.changed,time.monotonic()-3) for k,f in frames.items()}
+                    return real_sample(frames,label)
+                with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'),patch.object(runner,'summary_sample',side_effect=sample),patch('fixed_delivery.check_summary',side_effect=check):
+                    runner.start(True,True,True,stop_at_summary=False);e.player.join(12)
+                self.assertFalse(e.player.is_alive(),e.report)
+                self.assertEqual(e.report['summary_expired_samples'],1)
+                self.assertEqual(e.report['summary_verdict'],'shiny' if next_shiny else 'normal',e.report)
+                self.assertEqual(e.report['reset_attempts'],0 if next_shiny else 1)
+
+    def test_expired_final_check_requires_new_consensus_before_any_reset(self):
+        for next_shiny in (False,True):
+            with self.subTest(next_shiny=next_shiny),tempfile.TemporaryDirectory() as td:
+                e=self.engine(td);ir=Controller(e.store);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+                real_sample=runner.summary_sample;expired=False
+                from summary_check import check_summary as checker
+                change_after_check=False
+                def check(images,ocr,config):
+                    result=checker(images,ocr,config)
+                    if change_after_check:e.store.shiny=next_shiny
+                    return result
+                def sample(frames,label):
+                    nonlocal expired,change_after_check
+                    if label=='summary-final-reset-check' and not expired:
+                        expired=True;change_after_check=True
+                        frames={k:Frame(f.image,f.serial,f.received,f.changed,time.monotonic()-3) for k,f in frames.items()}
+                    else:change_after_check=False
+                    return real_sample(frames,label)
+                with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'),patch.object(runner,'summary_sample',side_effect=sample),patch('fixed_delivery.check_summary',side_effect=check):
+                    runner.start(True,True,True,stop_at_summary=False);e.player.join(12)
+                self.assertTrue(expired)
+                self.assertFalse(e.player.is_alive(),e.report)
+                self.assertEqual(e.report['reset_attempts'],0 if next_shiny else 1,e.report)
+                self.assertEqual(e.report['summary_verdict'],'shiny' if next_shiny else 'normal')
+
+    def test_expired_shiny_evidence_is_preserved_without_reset(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td,True);ir=Controller(e.store);runner=AppGiftHunt(e);runner.start();e.player.join(2)
+            original=runner.summary_sample
+            def sample(frames,label):
+                frames={k:Frame(f.image,f.serial,f.received,f.changed,time.monotonic()-3) for k,f in frames.items()}
+                return original(frames,label)
+            with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'),patch.object(runner,'summary_sample',side_effect=sample):
+                runner.start(True,True,True,stop_at_summary=False);e.player.join(10)
+            self.assertEqual(e.report['reset_attempts'],0)
+            self.assertEqual(e.report['summary_verdict'],'shiny')
+            self.assertTrue(e.report['summary_candidate_preserved'])
+
+    def test_expired_unclassified_summary_resumes_without_navigation_buttons(self):
+        for shiny in (False,True):
+            with self.subTest(shiny=shiny),tempfile.TemporaryDirectory() as td:
+                e=self.engine(td,shiny);source=Path(td)/'previous';source.mkdir()
+                for key in ('0','1'):e.store.snapshot(int(key)).image.save(source/f'fixed-baseline-{key}.png')
+                (source/'received-message.png').write_bytes(b'receipt evidence')
+                report=dict(mode='app_gift_hunt',target='poipole',round=32,completed_cycles=31,reset_attempts=31,summary_round=32,received_round=32,failure_cause='情報画面の判定中に映像が古くなりました。リセットしません。')
+                (source/'report.json').write_text(json.dumps(report));e.store.state=SUMMARY
+                ir=Controller(e.store);runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2)
+                with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                    runner.start(True,True,True,stop_at_summary=False);e.player.join(12)
+                self.assertFalse(e.player.is_alive(),e.report)
+                self.assertTrue(e.report['resumed_at_summary'])
+                self.assertEqual(e.report['reset_attempts'],0 if shiny else 1,e.report)
+                self.assertEqual(ir.down,[] if shiny else [HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,HIDButtons.START,HIDButtons.A])
+
     def test_info_stop_default_has_no_reset(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td);self.run_case(e,stop=True)
@@ -424,7 +504,7 @@ class AppLoopTests(unittest.TestCase):
             e=self.engine(td);source=Path(td)/'previous';source.mkdir()
             (source/'received-message.png').write_bytes(b'receipt')
             base=dict(mode='app_gift_hunt',target='poipole',round=1,completed_cycles=0,reset_attempts=0,summary_verdict='unknown',summary_scores={'context':[]})
-            for change in ({'summary_verdict':'shiny'},{'reset_attempts':1},{'summary_scores':{'context':['経験値','次のレベル']}},{'target':'typenull_poni'},{'completed_cycles':None},{'completed_cycles':False,'reset_attempts':False}):
+            for change in ({'summary_verdict':'shiny'},{'summary_round':1},{'summary_candidate_preserved':True},{'reset_attempts':1},{'summary_scores':{'context':['経験値','次のレベル']}},{'target':'typenull_poni'},{'completed_cycles':None},{'completed_cycles':False,'reset_attempts':False}):
                 with self.subTest(change=change):
                     (source/'report.json').write_text(json.dumps(dict(base,**change)))
                     runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2)
