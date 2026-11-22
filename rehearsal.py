@@ -23,6 +23,10 @@ BUTTONS = ('A', 'B', 'X', 'DPADUP', 'DPADDOWN', 'DPADLEFT', 'DPADRIGHT', 'START'
 DEFAULT_BOXES = {0: [0, 0, 320, 240], 1: [0, 0, 400, 240]}
 
 
+class VideoRecoveryPending(OSError):
+    """Input is suspended; no button may be replayed from an older video epoch."""
+
+
 def image_score(image, reference, box):
     a, b = roi(image, box).convert('RGB'), roi(reference, box).convert('RGB')
     if ImageStat.Stat(b.convert('L')).stddev[0] < 5:
@@ -81,6 +85,12 @@ class Rehearsal:
         self.stop = threading.Event(); self.manual_next = threading.Event()
         self.store = FrameStore(); self.source = None; self.reader = None; self.player = None
         self.lock = threading.Lock(); self.log_lock = threading.Lock()
+        self.failure_lock=threading.Lock()
+        self.video_recovery_enabled=False;self.video_recovering=threading.Event()
+        self.video_generation=0;self.video_pause_started=0;self.video_paused_total=0
+        self.video_recovery_timeout=90;self.video_recovery_limit=5
+        self.video_recovery_error=None;self.video_recovery_lock=threading.Lock()
+        self.video_recovery_attempts=0
         self.latest = {}; self.counts = {0: 0, 1: 0}; self.started = time.monotonic()
         self.trace = dict(schema=1, kind='delivery_rehearsal', backend=backend, quality=50,
                           shiny_classification=False, steps=[])
@@ -114,7 +124,11 @@ class Rehearsal:
 
     def fail(self, error):
         # Stop before any disk I/O: even a logging failure cannot leave input enabled.
-        self.stop.set()
+        with self.failure_lock:
+            self.stop.set()
+            if self.report.get('failure_cause'):
+                return  # Preserve the receiver's cause instead of "receiver stopped".
+            self.report['failure_cause']=str(error)
         text='安全停止: '+str(error)
         self.report['status']=text;self.notify('status',text)
         try:
@@ -129,22 +143,86 @@ class Rehearsal:
         self.reader = threading.Thread(target=self._receive, daemon=True)
         self.reader.start()
 
+    def operation_clock(self):
+        now=time.monotonic()
+        return now-self.video_paused_total-(now-self.video_pause_started if self.video_recovering.is_set() else 0)
+
+    def request_video_recovery(self,error):
+        if not self.video_recovery_enabled or self.stop.is_set():raise error
+        with self.video_recovery_lock:
+            if not self.video_recovering.is_set():
+                self.video_pause_started=time.monotonic();self.video_recovery_error=str(error)
+                self.video_recovery_attempts=0
+                self.video_recovering.set()
+                self.report['video_recovering']=True
+                self.event('video_input_paused',error=str(error),generation=self.video_generation)
+                self.notify('status','映像を再接続中。ボタン入力・リセットを停止しています。')
+
+    def _reconnect_video(self):
+        """Reader thread only. Discard the decoder, never reuse partial images."""
+        if self.source is not None:self.source.close()
+        last_error=self.video_recovery_error
+        while self.video_recovery_attempts<self.video_recovery_limit:
+            if self.stop.is_set():raise SafetyStop('接続復旧を停止しました。')
+            if time.monotonic()-self.video_pause_started>self.video_recovery_timeout:break
+            self.video_recovery_attempts+=1
+            self.event('video_reconnect_attempt',attempt=self.video_recovery_attempts,error=last_error)
+            if self.stop.wait(min(.3*self.video_recovery_attempts,2)):raise SafetyStop('接続復旧を停止しました。')
+            try:
+                self.source=open_video(self.backend,self.local,self.console,quality=50)
+                # Retain frame serials, but a newly attached static screen must
+                # not inherit an old freeze timestamp. Input remains suspended.
+                if isinstance(self.store,FrameStore):
+                    with self.store.lock:self.store.hashes.clear()
+                self.video_generation+=1
+                self.report['video_reconnections']=self.report.get('video_reconnections',0)+1
+                return
+            except OSError as error:last_error=str(error)
+        raise SafetyStop('映像の再接続に失敗しました。入力・リセットは再開しません: '+str(last_error))
+
+    def _resume_video_if_ready(self,counts):
+        if not self.video_recovering.is_set() or self.video_recovery_error is not None or min(counts.values())<2:return
+        try:self._transport_frames(check_origin=True)
+        except OSError:return
+        with self.video_recovery_lock:
+            self.video_paused_total+=time.monotonic()-self.video_pause_started
+            self.video_recovering.clear();self.report['video_recovering']=False
+        self.event('video_input_resumed',generation=self.video_generation)
+        self.notify('status','新しい両画面を確認。現在画面から操作を再確認して続行します。')
+
     def _receive(self):
         try:
             self.source = open_video(self.backend, self.local, self.console, quality=50)
+            epoch_counts={0:0,1:0};connected=time.monotonic()
             self.status('受信中。記録と照合のみでは入力しません。')
             while not self.stop.is_set():
-                try: frame = self.source.read()
-                except socket.timeout:
-                    if min(self.counts.values()):self.transport_healthy()
-                    elif time.monotonic()-self.started>15:raise SafetyStop('15秒以内に両画面を受信できませんでした。')
+                if self.video_recovering.is_set() and time.monotonic()-self.video_pause_started>self.video_recovery_timeout:
+                    raise SafetyStop('映像の復旧待ちが時間切れです。入力・リセットは停止しています。')
+                try:
+                    if self.video_recovering.is_set() and self.video_recovery_error is not None:
+                        self._reconnect_video();epoch_counts={0:0,1:0};connected=time.monotonic()
+                        self.video_recovery_error=None
+                    try:frame=self.source.read()
+                    except socket.timeout:
+                        if self.video_recovering.is_set():
+                            if time.monotonic()-self.video_pause_started>self.video_recovery_timeout:
+                                raise SafetyStop('映像の復旧待ちが時間切れです。入力・リセットは停止しています。')
+                            if min(epoch_counts.values())<2 and time.monotonic()-connected<5:continue
+                        if min(self.counts.values()):self._transport_frames(check_origin=False)
+                        elif time.monotonic()-self.started>15:raise SafetyStop('15秒以内に両画面を受信できませんでした。')
+                        continue
+                except OSError as error:
+                    if not self.video_recovery_enabled:raise
+                    self.request_video_recovery(error);self.video_recovery_error=str(error)
                     continue
                 self.store.put(frame.screen, frame.image, frame.started, frame.completed)
+                epoch_counts[frame.screen]+=1
                 with self.lock:
                     self.latest[frame.screen] = frame.image
                     self.counts[frame.screen] += 1
                 self.event('frame', screen=frame.screen, count=self.counts[frame.screen],
                            span=frame.completed-frame.started)
+                self._resume_video_if_ready(epoch_counts)
         except Exception as error:
             if not self.stop.is_set(): self.fail(error)
         finally:
@@ -154,13 +232,24 @@ class Rehearsal:
 
     def healthy(self):
         if self.stop.is_set(): raise SafetyStop('受信が停止しています。再接続してください。')
-        return {str(s): self.store.snapshot(s, max_age=2, max_span=2, freeze_timeout=15)
-                for s in (0, 1)}
+        if self.video_recovering.is_set():raise VideoRecoveryPending('映像復旧中は入力しません。')
+        try:return self._transport_frames(check_origin=True)
+        except OSError as error:
+            if not self.video_recovery_enabled:raise
+            self.request_video_recovery(error)
+            raise VideoRecoveryPending(str(error)) from error
+
+    def _transport_frames(self,check_origin):
+        if self.stop.is_set():raise SafetyStop('受信が停止しています。再接続してください。')
+        return {str(s):self.store.snapshot(s,max_age=2,max_span=2,freeze_timeout=15,check_origin=check_origin) for s in (0,1)}
 
     def transport_healthy(self):
         """Receiver-only check. Input always retains the stricter origin limit."""
-        if self.stop.is_set():raise SafetyStop('受信が停止しています。再接続してください。')
-        return {str(s):self.store.snapshot(s,max_age=2,max_span=2,freeze_timeout=15,check_origin=False) for s in (0,1)}
+        if self.video_recovering.is_set():return {}
+        try:return self._transport_frames(check_origin=False)
+        except OSError as error:
+            if not self.video_recovery_enabled:raise
+            self.request_video_recovery(error);return {}
 
     def recognition_frames(self):
         try:frames=self.healthy()

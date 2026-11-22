@@ -3,6 +3,60 @@
 Base: `u93132/ShinyHunterUSUM@f49910affd7ed35b38af8e2b5b35499dcc554f0d`.
 Branch: `macos-japanese-gifts` on `senuhi/ShinyHunterUSUM`.
 
+## 2026-11-22: video-only recovery instead of terminating the hunt (v1.6)
+
+The native session that started at about 11:28 JST completed eighteen normal
+rounds/resets. During registration in round nineteen, one ChirunoMod fractional
+screen exceeded the unchanged two-second assembly limit (elapsed 1868.043 s).
+The receiver terminated; the worker then overwrote the visible cause with a
+generic receiver-stopped error. The NORMAL result still shown belonged to round
+eighteen, not the unclassified nineteenth gift. No nineteenth reset was sent.
+Earlier nighttime stops had different immediate triggers: one initial A produced
+no dialogue, late NPC dialogue was mistaken for menu progression, and one title
+screen receive gap exceeded two seconds. Those were not proof of a shiny or of
+Mac sleep. The remaining video fault was fatal because automatic reattachment
+was missing from the production app.
+
+The Japanese production app now suspends input on decoder/socket/stale/frozen
+video errors and reopens only the video source. Partial decoder state is thrown
+away; a bounded recovery (five attempts, approximately ninety seconds) requires
+at least two new complete frames from each screen under the original freshness
+limits. Frame serials remain monotonic, but old freeze timestamps are discarded.
+Action deadlines exclude recovery time. Navigation buttons computed on an older
+video generation are cancelled, not replayed. Summary consensus is discarded
+across video generations and must obtain three fresh NORMAL pairs again, plus
+the final semantic/colour/freshness guard immediately before RESET. A RESET
+already sent is never replayed. Title/continue states are observed before START/A.
+The existing English/diagnostic receiver remains fail-closed by default.
+Terminal failures retain the first cause. Each round clears the preceding
+Summary result and tags new evidence with its round number. Explicit recovery
+of an old report containing a stale previous-round NORMAL result requires journal
+proof of previous Summary -> reset -> a new receipt. Registration cleanup uses B
+only until three matches of the original saved field; fresh Summary judgement is
+still required before resetting that individual.
+
+Verification:
+
+- All 137 unit/loopback regressions passed (89.328 s, localhost sockets only).
+- After adding a lock to preserve the first failure under competing worker errors,
+  the five receiver recovery regressions passed again (1.957 s).
+- Native Tk + actual local Vision + loopback Chiruno/Luma, with the TCP connection
+  deliberately cut during reception: NORMAL recovered and completed one round
+  (147 controller datagrams, one reset). The same cut followed by a synthetic red
+  shiny star recovered and stopped with zero resets (126 datagrams). Timers were
+  shortened; these are synthetic game images, not hardware shiny validation.
+- Via the Mac app UI, the unclassified nineteenth native individual was preserved,
+  taken from registration to Summary, newly confirmed NORMAL and reset once.
+  The app then completed another ordinary native round and began its next round,
+  with cycle limit zero and no safe-stop event at that observation. Real native
+  disconnect/reattach has not yet occurred in this new session; the native loop
+  and the deliberately interrupted loopback test are distinct evidence.
+
+No CLI tool connected to or controlled the physical console. Native shiny
+accuracy, native Type: Null Poni, and thousands of uninterrupted hardware rounds
+remain unverified. Hourly Codex checks are separately configured; transient video
+recovery now belongs to the app and does not wait for that scheduled check.
+
 ## 2026-11-22: observed navigation, repeated masks and pending-gift resume (v1.5)
 
 After four native rounds in the new session, round five reached its receipt,

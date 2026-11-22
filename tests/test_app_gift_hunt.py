@@ -28,6 +28,10 @@ class Game:
         image=Image.new('RGB',((320 if screen==0 else 400),240),colour)
         if screen==0 and state in (0,13):image.paste(FIELD_HUD,(0,0))
         draw=ImageDraw.Draw(image);draw.rectangle((20,20,180,100),fill='white')
+        if screen==1 and state in (SUMMARY+1,SUMMARY+2):
+            stage='title' if state==SUMMARY+1 else 'continue'
+            root=NAV_ROOT.parent/'Diagnostics';item=json.loads((root/'manifest.json').read_text())['stages'][stage]
+            with Image.open(root/item['template']) as part:image.paste(part,item['box'][:2])
         if screen==0 and state in (14,15,16):
             kind='menu' if state==14 else 'party'
             for item in NAV_MANIFEST['states'][kind]:
@@ -100,6 +104,36 @@ class AppLoopTests(unittest.TestCase):
                 self.assertEqual(e.report['reset_attempts'],0)
                 self.assertEqual(e.report['completed_cycles'],0)
                 self.assertNotIn(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,ir.down)
+
+    def test_reconnect_after_consensus_requires_new_consensus_and_keeps_shiny(self):
+        for shiny in (False,True):
+            with self.subTest(shiny=shiny),tempfile.TemporaryDirectory() as td:
+                e=self.engine(td);original=e.event;changed=False
+                def event(kind,**details):
+                    nonlocal changed
+                    original(kind,**details)
+                    if not changed and kind=='summary_verdict' and details.get('phase','').endswith('summary-3'):
+                        changed=True;e.video_generation+=1;e.store.shiny=shiny
+                e.event=event;ir,_=self.run_case(e)
+                self.assertTrue(changed)
+                self.assertEqual(e.report['reset_attempts'],0 if shiny else 1,e.report)
+                self.assertEqual(e.report['summary_verdict'],'shiny' if shiny else 'normal')
+                if shiny:self.assertNotIn(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,ir.down)
+                records=[json.loads(x) for x in (e.directory/'events.jsonl').read_text().splitlines()]
+                self.assertGreaterEqual(sum(x['event']=='summary_verdict' for x in records),6)
+
+    def test_video_epoch_change_immediately_before_reset_cannot_replay_reset(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);original=e.event;changed=False
+            def event(kind,**details):
+                nonlocal changed
+                original(kind,**details)
+                if not changed and kind=='input_attempt' and details.get('button')=='RESET':
+                    changed=True;e.video_generation+=1;e.store.shiny=True
+            e.event=event;ir,_=self.run_case(e)
+            self.assertEqual(e.report['reset_attempts'],0,e.report)
+            self.assertEqual(e.report['summary_verdict'],'shiny')
+            self.assertNotIn(HIDButtons.L|HIDButtons.R|HIDButtons.SELECT,ir.down)
 
     def test_info_stop_default_has_no_reset(self):
         with tempfile.TemporaryDirectory() as td:
@@ -348,6 +382,28 @@ class AppLoopTests(unittest.TestCase):
                         self.assertEqual(image.convert('RGB').tobytes(),runner.baseline[key].tobytes())
                 self.assertEqual(e.report['summary_verdict'],'shiny' if shiny else 'normal',e.report)
                 self.assertEqual(e.report['reset_attempts'],0 if shiny else 1)
+
+    def test_old_report_previous_round_normal_does_not_classify_pending_registration(self):
+        with tempfile.TemporaryDirectory() as td:
+            e=self.engine(td);source=Path(td)/'previous';source.mkdir()
+            for key in ('0','1'):e.store.snapshot(int(key)).image.save(source/f'fixed-baseline-{key}.png')
+            (source/'received-message.png').write_bytes(b'receipt evidence')
+            (source/'report.json').write_text(json.dumps(dict(mode='app_gift_hunt',target='poipole',round=19,completed_cycles=18,reset_attempts=18,summary_verdict='normal',summary_scores={'context':['experience','next_level']})))
+            records=[dict(event='summary_verdict',elapsed=1,phase='round-000018-summary-final-reset-check'),dict(event='input_attempt',elapsed=2,button='RESET'),dict(event='gift_receipt_read',elapsed=3,decision='received')]
+            (source/'events.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in records))
+            e.store.state=8
+            class RegistrationOCR(OCR):
+                def read(self,image,**options):
+                    if self.game.state%ROUND==8:return []
+                    return super().read(image,**options)
+            runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2);ir=Controller(e.store)
+            with patch('app_gift_hunt.MacOCR',return_value=RegistrationOCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                runner.start(True,True,True,stop_at_summary=False);e.player.join(12)
+            self.assertFalse(e.player.is_alive(),e.report)
+            self.assertEqual(ir.down[0],HIDButtons.B)
+            self.assertEqual(e.report['completed_cycles'],1,e.report)
+            self.assertEqual(e.report['summary_round'],1)
+            self.assertEqual(e.report['reset_attempts'],1)
 
     def test_resume_rejects_shiny_summary_and_already_reset_sources(self):
         with tempfile.TemporaryDirectory() as td:

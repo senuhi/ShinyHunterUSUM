@@ -10,14 +10,14 @@ from PIL import Image
 import re
 import sys
 import time
-from automatic_delivery import DIALOGUE_BOX,normalized
+from automatic_delivery import DIALOGUE_BOX,normalized,screen_stage
 from fixed_delivery import FixedDelivery
 from gift_recognition import SafetyStop
 from mac_ocr import MacOCR
 from production_setup import PRODUCTION_TARGETS,preparation,summary_profile
 from summary_check import load_config
 from gift_navigation import NavigationAnchors
-from rehearsal import image_score
+from rehearsal import image_score,VideoRecoveryPending
 from tppflush import LumaInputServer,CPAD_Commands
 
 
@@ -35,6 +35,25 @@ class AppGiftHunt(FixedDelivery):
 
     def configuration(self):return load_config(summary_profile(self.target))
 
+    def pending_receipt_source(self,source):
+        if source.get('summary_verdict')=='unknown' and not source.get('summary_scores',{}).get('context'):return True
+        # Older releases left the previous round's NORMAL result in the report.
+        # Require journal evidence that the new receipt happened after its reset.
+        if source.get('summary_verdict')!='normal':return False
+        events=[]
+        for path in self.resume_directory.glob('events.jsonl*'):
+            for line in path.read_text().splitlines():
+                event=json.loads(line)
+                if event.get('event') in ('summary_verdict','input_attempt','gift_receipt_read'):events.append(event)
+        summaries=[e for e in events if e['event']=='summary_verdict']
+        if not summaries:return False
+        last=max(summaries,key=lambda e:e['elapsed'])
+        match=re.match(r'round-(\d+)-',last.get('phase',''))
+        if not match or int(match[1])>=source['round']:return False
+        receipt=max((e['elapsed'] for e in events if e['event']=='gift_receipt_read' and e.get('decision')=='received'),default=-1)
+        reset=max((e['elapsed'] for e in events if e['event']=='input_attempt' and e.get('button')=='RESET'),default=-1)
+        return last['elapsed']<reset<receipt
+
     def start(self,saved=False,approved=False,live=False,party_before=1,stop_at_summary=True,cycles=1,interval=1):
         if self.engine.playing:raise SafetyStop('すでに周回中です。')
         if party_before!=1:raise SafetyStop('日本語の本番周回は受取前の手持ち1匹が前提です。')
@@ -46,8 +65,7 @@ class AppGiftHunt(FixedDelivery):
                 source.get('mode')!='app_gift_hunt' or source.get('target')!=self.target or
                 source.get('round')!=source.get('completed_cycles',0)+1 or
                 source.get('reset_attempts')!=source.get('completed_cycles') or
-                source.get('summary_verdict')!='unknown' or
-                source.get('summary_scores',{}).get('context') or
+                not self.pending_receipt_source(source) or
                 not (self.resume_directory/'received-message.png').exists()):
                 raise SafetyStop('受取後の中断記録を安全に引き継げません。リセットしません。')
             baseline={}
@@ -55,25 +73,15 @@ class AppGiftHunt(FixedDelivery):
                 with Image.open(self.resume_directory/f'fixed-baseline-{key}.png') as image:
                     if image.size!=size:raise SafetyStop('復旧用の開始画像サイズが不正です。')
                     baseline[key]=image.convert('RGB')
-            # The operator starts this recovery explicitly. The old baseline is
-            # used only when the current map/field matches the same gift site.
-            current=self.ready()
-            # Menu/party recovery first uses B only, and clear_receipt then
-            # requires three matches to the original field before any A/X.
-            known_navigation=False
-            for _ in range(15):
-                known_navigation=self.navigation.identify(current['0'].image)[0] in ('menu','party')
-                if known_navigation:break
-                if image_score(current['1'].image,baseline['1'],[0,0,400,145])<=.05 and self.navigation.map_score(current['0'].image,baseline['0'])<=.13:break
-                self.engine.stop.wait(.1);current=self.ready()
-            if not known_navigation and (image_score(current['1'].image,baseline['1'],[0,0,400,145])>.05 or
-                self.navigation.map_score(current['0'].image,baseline['0'])>.13):
-                raise SafetyStop('中断した受取場所と現在画面が一致しません。操作しません。')
+            # Registration may cover the entire upper field. Recovery uses B
+            # only until three original-field matches; no A/X/reset beforehand.
+            self.ready()
             self.engine.fixed_baseline=baseline
             # Keep the verified pre-gift field in the new session as well;
             # passive recovery may have been captured on a menu or party screen.
             for key,image in baseline.items():image.save(self.engine.directory/f'fixed-baseline-{key}.png')
             (self.engine.directory/'received-message.png').write_bytes((self.resume_directory/'received-message.png').read_bytes())
+        self.engine.video_recovery_enabled=True
         super().start(saved,approved,live,interval,party_before,stop_at_summary)
 
     def approach(self):
@@ -111,15 +119,16 @@ class AppGiftHunt(FixedDelivery):
         Keep upstream A/B ordering, but do not switch to B merely because a
         future-tense offer mentions the name in a different Japanese position.
         """
-        self.approach();end=time.monotonic()+self.receipt_timeout
+        self.approach();end=self.engine.operation_clock()+self.receipt_timeout
         serial=0;attempts=0;since=0;dialogue_seen=False;field_stable=0;start_retries=0
-        while time.monotonic()<end:
+        while self.engine.operation_clock()<end:
             frames=self.ready();frame=frames['1']
             if frame.serial<=serial or (frame.started is not None and frame.started<since):
                 self.engine.stop.wait(.03);continue
             serial=frame.serial;crop=frame.image.crop(DIALOGUE_BOX)
             rows=self.ocr.read(crop);decision,text=self.receipt_kind(rows)
-            self.engine.healthy()
+            try:self.engine.healthy()
+            except VideoRecoveryPending:continue
             if time.monotonic()-(frame.started if frame.started is not None else frame.received)>2:
                 raise SafetyStop('受取確認中に映像が古くなりました。追加入力しません。')
             self.engine.event('gift_receipt_read',target=self.target,rows=rows,decision=decision,text=text)
@@ -131,6 +140,7 @@ class AppGiftHunt(FixedDelivery):
                 # Field return, Summary identity/colour and final reset checks
                 # remain independent and mandatory.
                 frame.image.save(self.engine.directory/'received-message.png')
+                self.engine.report['received_round']=self.engine.report.get('round')
                 self.engine.status('受取表示を確認。図鑑登録・会話の終了を待ちます。')
                 return
             if any(word in text for word in ('レポト','セブ','逃が','にがす','交換','ニックネム','ボックス','満杯')):
@@ -166,8 +176,8 @@ class AppGiftHunt(FixedDelivery):
         until three fresh upper frames match this connection's saved field.
         """
         if self.baseline is None:raise SafetyStop('受取前の開始画像がありません。')
-        end=time.monotonic()+timeout;serial=0;stable=0;presses=0;since=time.monotonic()
-        while time.monotonic()<end:
+        end=self.engine.operation_clock()+timeout;serial=0;stable=0;presses=0;since=time.monotonic()
+        while self.engine.operation_clock()<end:
             frames=self.ready();frame=frames['1']
             if frame.serial<=serial or frame.started is None or frame.started<since:
                 self.engine.stop.wait(.03);continue
@@ -223,15 +233,19 @@ class AppGiftHunt(FixedDelivery):
         A is sent only after a menu, selected second slot or Summary context is
         recognized. Late NPC dialogue returns to B cleanup, not blind A presses.
         """
-        end=time.monotonic()+self.navigation_timeout
+        end=self.engine.operation_clock()+self.navigation_timeout
         serials={};since=time.monotonic();previous=None;stable=0;actions=0;unknown_since=None;first_slot_retries=0
-        while time.monotonic()<end:
+        generation=self.engine.video_generation
+        while self.engine.operation_clock()<end:
             frames=self.ready()
+            if generation!=self.engine.video_generation:
+                generation=self.engine.video_generation;previous=None;stable=0;unknown_since=None
             if not all(frame.serial>serials.get(key,0) and frame.started is not None and frame.started>=since for key,frame in frames.items()):
                 self.engine.stop.wait(.03);continue
             serials={key:frame.serial for key,frame in frames.items()}
             state,details=self.navigation_state(frames)
-            self.engine.healthy()
+            try:self.engine.healthy()
+            except VideoRecoveryPending:continue
             if any(time.monotonic()-frame.started>2 for frame in frames.values()):
                 raise SafetyStop('画面遷移の確認中に映像が古くなりました。リセットしません。')
             self.engine.event('gift_navigation',state=state,serials=serials,**details)
@@ -239,9 +253,9 @@ class AppGiftHunt(FixedDelivery):
             stable=stable+1 if state==previous else 1;previous=state
             if state in ('unknown','party_uncertain'):
                 if unknown_since is None:
-                    unknown_since=time.monotonic()
+                    unknown_since=self.engine.operation_clock()
                     self.engine.status('画面の切替を確認中。次の操作はまだ送りません。')
-                if time.monotonic()-unknown_since>10:raise SafetyStop('情報画面へ進む画面を認識できません。リセットしません。')
+                if self.engine.operation_clock()-unknown_since>10:raise SafetyStop('情報画面へ進む画面を認識できません。リセットしません。')
                 self.engine.stop.wait(.1);continue
             unknown_since=None
             if stable<2:self.engine.stop.wait(.03);continue
@@ -266,7 +280,39 @@ class AppGiftHunt(FixedDelivery):
         raise SafetyStop('情報画面への遷移が時間切れです。リセットしません。')
 
     def summary_sample(self,frames,label):
+        self.engine.report['summary_round']=self.engine.report.get('round')
         return super().summary_sample(frames,f'round-{self.engine.report.get("round",0):06d}-{label}')
+
+    def reset_from_summary(self):
+        for _ in range(3):
+            resets=self.engine.report['reset_attempts']
+            try:return super().reset_from_summary()
+            except VideoRecoveryPending:
+                if self.engine.report['reset_attempts']!=resets:return  # Never replay a sent reset.
+                self.reset_sent=False;self.normal_summary_token=None
+                self.ready()
+                if self.observe_summary(time.monotonic())!='normal':
+                    raise SafetyStop('再接続後に色違い候補を検出。リセットしません。')
+        raise SafetyStop('リセット直前に映像が安定しません。リセットしません。')
+
+    def enter_game(self):
+        end=self.engine.operation_clock()+65;serial=0;previous=None;stable=0;attempts=0
+        while self.engine.operation_clock()<end:
+            frames=self.ready();upper=frames['1']
+            if upper.serial<=serial:self.engine.stop.wait(.03);continue
+            serial=upper.serial
+            if image_score(upper.image,self.baseline['1'],[0,0,400,240])<=.05:return
+            state='unknown'
+            for stage in ('title','continue'):
+                if screen_stage(upper.image,stage)[0]:state=stage;break
+            stable=stable+1 if previous==state else 1;previous=state
+            if state=='unknown' or stable<2:self.engine.stop.wait(.05);continue
+            if attempts>=6:raise SafetyStop('タイトルからの復帰操作上限です。再リセットしません。')
+            attempts+=1
+            self.click('START' if state=='title' else 'A')
+            stable=0;previous=None
+            self.wait(3 if state=='title' else 8,'タイトル・続行画面から復帰中')
+        raise SafetyStop('タイトルからの復帰を確認できません。再リセットしません。')
 
     def run_fixed(self,live):
         if not live:
@@ -290,6 +336,7 @@ class AppGiftHunt(FixedDelivery):
                 self.ready();self.actions=0;self.max_actions=180
                 self.reset_sent=False;self.normal_summary_token=None
                 e.report['round']=e.report['completed_cycles']+1
+                for key in ('summary_verdict','summary_scores','summary_round','received_round'):e.report.pop(key,None)
                 e.status(f'{self.target_name} · {e.report["round"]}周目：受取を開始')
                 resuming=self.resume_pending
                 if resuming:

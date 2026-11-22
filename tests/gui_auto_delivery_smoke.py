@@ -38,6 +38,8 @@ def main():
         drop_start=production and '--drop-first-start' in sys.argv[1:]
         resume_pending=production and '--resume-pending' in sys.argv[1:]
         late_dialogue=production and '--late-dialogue' in sys.argv[1:]
+        disconnect_once=production and '--disconnect-once' in sys.argv[1:]
+        disconnected=[False]
         pending_dialogue=[resume_pending];late_triggered=[False]
         target_name=('タイプ：ヌル' if null_target else 'ベベノム') if production else 'ピカチュウ'
         app=ShinyHunterUSUM()
@@ -111,6 +113,10 @@ def main():
                     if production:draw.text((20,20),target_name,font=font,fill='black')
                     draw.text((20,60),'けいけんち',font=font,fill='black')
                     draw.text((20,95),'つぎのレベルまで',font=font,fill='black')
+            if production and screen==1 and phase in (summary_phase+1,summary_phase+2):
+                stage='title' if phase==summary_phase+1 else 'continue'
+                item=json.loads((assets/'manifest.json').read_text())['stages'][stage]
+                with Image.open(assets/item['template']) as part:image.paste(part,item['box'][:2])
             if screen==0 and phase==0 and len(downs)>=len(expected):
                 # A real post-reset Rotom question differs from the map; the
                 # upper saved-location scene is the final return criterion.
@@ -118,29 +124,36 @@ def main():
                 ImageDraw.Draw(image).text((20,60),'ROTOM QUESTION',fill='black')
             return image
         def produce():
-            try:
-                connection,_=server.accept()
-                with connection:
-                    connection.settimeout(3);data=b''
-                    while len(data)<44:data+=connection.recv(44-len(data))
-                    assert data==b''.join(setup_packets(50))
-                    tick=0
-                    while not halted.is_set():
-                        with lock:phase=state[0]
-                        images={screen:native_image(screen,phase,tick) for screen in (1,0)}
-                        for i in range(8):
-                            for screen in (1,0):
-                                image=images[screen];width=image.width//8
-                                raw=image.crop((i*width,0,(i+1)*width,240)).rotate(-90,expand=True)
-                                r,g,b=raw.split();raw=Image.merge('RGB',(b,g,r))
-                                buffer=io.BytesIO();raw.save(buffer,'JPEG',quality=50)
-                                connection.sendall(packet(1,0x11 if screen==0 else 1,buffer.getvalue(),8|i))
-                            if phase==3 and i==4 and not jitter_injected[0]:
-                                jitter_injected[0]=True;halted.wait(1.1)
-                            halted.wait(.065)
-                        tick+=1
-            except Exception as error:
-                if not halted.is_set() and not (production and window.engine.stop.is_set()):errors.append(('stream',str(error)))
+            tick=0
+            while not halted.is_set():
+                try:
+                    connection,_=server.accept()
+                    with connection:
+                        connection.settimeout(3);data=b''
+                        while len(data)<44:data+=connection.recv(44-len(data))
+                        assert data==b''.join(setup_packets(50))
+                        while not halted.is_set():
+                            with lock:phase=state[0]
+                            images={screen:native_image(screen,phase,tick) for screen in (1,0)}
+                            interrupted=False
+                            for i in range(8):
+                                for screen in (1,0):
+                                    image=images[screen];width=image.width//8
+                                    raw=image.crop((i*width,0,(i+1)*width,240)).rotate(-90,expand=True)
+                                    r,g,b=raw.split();raw=Image.merge('RGB',(b,g,r))
+                                    buffer=io.BytesIO();raw.save(buffer,'JPEG',quality=50)
+                                    connection.sendall(packet(1,0x11 if screen==0 else 1,buffer.getvalue(),8|i))
+                                if disconnect_once and not disconnected[0] and 4<=phase<13 and i==4:
+                                    disconnected[0]=True;interrupted=True;break
+                                if phase==3 and i==4 and not jitter_injected[0]:
+                                    jitter_injected[0]=True;halted.wait(1.1)
+                                halted.wait(.065)
+                            tick+=1
+                            if interrupted:break
+                except Exception as error:
+                    if not halted.is_set() and not (production and window.engine.video_recovering.is_set()):
+                        if not (production and window.engine.stop.is_set()):errors.append(('stream',str(error)))
+                    if not production:return
         def receive_inputs():
             held=0
             try:
@@ -213,7 +226,9 @@ def main():
         expected_delays=receipt_delays+[d for _,d in nav]
         if resume_pending:expected_delays=[.5]+[d for _,d in nav[10:]]
         elif late_dialogue:expected_delays=receipt_delays+[.5]*10+[2,.5]+[d for _,d in nav[10:]]
-        assert delays==expected_delays+([] if expect_stop else [25,5,12]),delays
+        assert delays==expected_delays+([] if expect_stop else ([25,3,8] if production else [25,5,12])),delays
+        if disconnect_once:
+            assert disconnected[0] and window.engine.report['video_reconnections']>=1
         if not resume_pending:assert jitter_injected[0]
         if drop_start:
             events=[json.loads(line) for line in (window.engine.directory/'events.jsonl').read_text().splitlines()]

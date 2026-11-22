@@ -13,7 +13,7 @@ from gift_recognition import SafetyStop,colour_verdict
 from mac_ocr import MacOCR
 from tppflush import LumaInputServer
 from summary_check import check_summary,load_config,summary_buttons
-from rehearsal import image_score
+from rehearsal import image_score,VideoRecoveryPending
 from production_setup import DEFAULT_PARTY_BEFORE
 
 class FixedDelivery(AutomaticDelivery):
@@ -42,8 +42,10 @@ class FixedDelivery(AutomaticDelivery):
         self.engine.player.start()
 
     def ready(self,timeout=4):
-        deadline=time.monotonic()+timeout
-        while time.monotonic()<deadline:
+        deadline=self.engine.operation_clock()+timeout
+        wall_deadline=time.monotonic()+self.engine.video_recovery_timeout+timeout
+        while self.engine.operation_clock()<deadline:
+            if time.monotonic()>wall_deadline:raise SafetyStop('映像復旧が時間切れです。入力しません。')
             frames=self.engine.recognition_frames()
             if frames is not None:
                 # Leave room for OCR/final checking; input origin limit stays 2s.
@@ -61,9 +63,16 @@ class FixedDelivery(AutomaticDelivery):
             self.engine.stop.wait(min(.1,max(0,end-time.monotonic())))
 
     def click(self,button):
+        generation=self.engine.video_generation
         self.ready()
+        if generation!=self.engine.video_generation:return False
         if self.actions>=self.max_actions:raise SafetyStop('固定手順の操作上限です。')
-        self.actions+=1;self.engine.pulse(button,self.controller,copies=self.button_copies)
+        self.actions+=1
+        def same_video():
+            if generation!=self.engine.video_generation:raise VideoRecoveryPending('画面を再確認してから操作します。')
+        try:self.engine.pulse(button,self.controller,before_send=same_video,copies=self.button_copies)
+        except VideoRecoveryPending:return False
+        return True
 
     def enter_game(self):
         self.click('START');self.wait(5,'続行画面の読み込み待ち')
@@ -83,24 +92,34 @@ class FixedDelivery(AutomaticDelivery):
         return result['verdict']
 
     def observe_summary(self,since,timeout=12):
-        end=time.monotonic()+timeout;serials={};verdicts=[]
-        while time.monotonic()<end:
+        end=self.engine.operation_clock()+timeout;serials={};verdicts=[];generation=self.engine.video_generation
+        while self.engine.operation_clock()<end:
             frames=self.ready()
+            if generation!=self.engine.video_generation:
+                generation=self.engine.video_generation;serials={};verdicts=[]
+                end=self.engine.operation_clock()+timeout
             if not all(f.serial>serials.get(key,0) and f.started is not None and f.started>=since for key,f in frames.items()):
                 self.engine.stop.wait(.03);continue
             serials={key:f.serial for key,f in frames.items()}
-            verdict=self.summary_sample(frames,f'summary-{len(verdicts)+1}')
+            try:verdict=self.summary_sample(frames,f'summary-{len(verdicts)+1}')
+            except VideoRecoveryPending:
+                verdicts=[];serials={};continue
+            if generation!=self.engine.video_generation:
+                verdicts=[];serials={};continue
             if verdict=='unknown':raise SafetyStop('情報画面・対象名・色判定が不明です。リセットしません。')
             verdicts.append(verdict)
             if len(set(verdicts))>1:raise SafetyStop('情報画面の判定が一致しません。リセットしません。')
             if len(verdicts)>=self.summary_config['samples']:
                 self.summary_serials=serials
-                if verdict=='normal':self.normal_summary_token=frames
+                if verdict=='normal':
+                    self.normal_summary_token=frames;self.normal_summary_generation=generation
                 return verdict
         raise SafetyStop('情報画面の判定が時間内に揃いません。リセットしません。')
 
     def reset_from_summary(self):
         if self.reset_sent:raise SafetyStop('リセットは1回だけです。')
+        if self.engine.video_recovering.is_set() or getattr(self,'normal_summary_generation',self.engine.video_generation)!=self.engine.video_generation:
+            raise VideoRecoveryPending('再接続後は通常色を3枚確認し直します。')
         self.reset_sent=True
         token,self.normal_summary_token=self.normal_summary_token,None
         if token is None or self.stop_at_summary:
@@ -117,6 +136,8 @@ class FixedDelivery(AutomaticDelivery):
             raise SafetyStop('送信直前の通常色確認が不明です。リセットしません。')
         def final_guard():
             current=self.engine.healthy()
+            if getattr(self,'normal_summary_generation',self.engine.video_generation)!=self.engine.video_generation:
+                raise VideoRecoveryPending('最終判定の映像接続が変わりました。')
             if any(time.monotonic()-(f.started if f.started is not None else f.received)>2 for f in frames.values()):
                 raise SafetyStop('最終判定が送信前に古くなりました。リセットしません。')
             colour=self.summary_config['colour']
@@ -134,9 +155,10 @@ class FixedDelivery(AutomaticDelivery):
     def wait_field(self,since):
         # Rotom may independently open a question after loading. It is not a
         # failure to return to the saved location; use the upper field scene.
-        end=time.monotonic()+20;stable=0;serial=0
-        while time.monotonic()<end:
+        end=self.engine.operation_clock()+20;stable=0;serial=0;generation=self.engine.video_generation
+        while self.engine.operation_clock()<end:
             frames=self.ready();frame=frames['1']
+            if generation!=self.engine.video_generation:stable=0;generation=self.engine.video_generation
             if frame.serial<=serial or frame.started is None or frame.started<since:
                 self.engine.stop.wait(.03);continue
             serial=frame.serial
