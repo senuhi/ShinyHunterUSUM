@@ -22,8 +22,17 @@ instead of treating new TCP timestamps on the same frozen picture as recovery.
 Nine focused regressions passed (17.366 s), including unmatchable title artwork,
 both routes' multi-round loops, shiny zero-reset, and cached frozen-image veto.
 These software changes do not claim to repair the reported physical freeze.
-The reboot retry has not yet started; the configured cycle-zero app is waiting
-unconnected for the operator's console-ready state/IP confirmation.
+The operator subsequently confirmed a physical reboot and the same console IP,
+with HIMEM/USUM/InputRedirection ready at the saved NPC. Via the app UI the normal
+cycle-zero hunt was started. At elapsed 24.402 s, the same native ChirunoMod
+assembly-freshness error occurred; the app suspended input, reattached video and
+resumed on fresh pairs at 26.048 s (about 1.65 s later), without terminating the
+hunt. Fresh NORMAL/name-matched Summary pairs and final confirmation then led to
+one reset and a complete saved-field return; the next ordinary round also
+reached NORMAL and its reset. This is native evidence of automatic video fault
+recovery and boot progression after reboot, distinct from the earlier loopback
+proof. It does not establish the cause of the earlier physical freeze or prove
+thousands of uninterrupted rounds.
 
 ## 2026-11-22: video-only recovery instead of terminating the hunt (v1.6)
 
