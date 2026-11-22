@@ -42,7 +42,8 @@ class AppGiftHunt(FixedDelivery):
         self.cycle_limit=cycles
         if live and self.resume_pending:
             source=json.loads((self.resume_directory/'report.json').read_text())
-            if (source.get('mode')!='app_gift_hunt' or source.get('target')!=self.target or
+            if (any(type(source.get(key)) is not int or source[key]<0 for key in ('round','completed_cycles','reset_attempts')) or
+                source.get('mode')!='app_gift_hunt' or source.get('target')!=self.target or
                 source.get('round')!=source.get('completed_cycles',0)+1 or
                 source.get('reset_attempts')!=source.get('completed_cycles') or
                 source.get('summary_verdict')!='unknown' or
@@ -57,11 +58,22 @@ class AppGiftHunt(FixedDelivery):
             # The operator starts this recovery explicitly. The old baseline is
             # used only when the current map/field matches the same gift site.
             current=self.ready()
-            if (image_score(current['1'].image,baseline['1'],[0,0,400,145])>.05 or
-                self.navigation.map_score(current['0'].image,baseline['0'])>.13 or
-                image_score(current['1'].image,baseline['1'],[0,0,400,240])<=.05):
+            # Menu/party recovery first uses B only, and clear_receipt then
+            # requires three matches to the original field before any A/X.
+            known_navigation=False
+            for _ in range(15):
+                known_navigation=self.navigation.identify(current['0'].image)[0] in ('menu','party')
+                if known_navigation:break
+                if image_score(current['1'].image,baseline['1'],[0,0,400,145])<=.05 and self.navigation.map_score(current['0'].image,baseline['0'])<=.13:break
+                self.engine.stop.wait(.1);current=self.ready()
+            if not known_navigation and (image_score(current['1'].image,baseline['1'],[0,0,400,145])>.05 or
+                self.navigation.map_score(current['0'].image,baseline['0'])>.13):
                 raise SafetyStop('中断した受取場所と現在画面が一致しません。操作しません。')
             self.engine.fixed_baseline=baseline
+            # Keep the verified pre-gift field in the new session as well;
+            # passive recovery may have been captured on a menu or party screen.
+            for key,image in baseline.items():image.save(self.engine.directory/f'fixed-baseline-{key}.png')
+            (self.engine.directory/'received-message.png').write_bytes((self.resume_directory/'received-message.png').read_bytes())
         super().start(saved,approved,live,interval,party_before,stop_at_summary)
 
     def approach(self):
@@ -205,14 +217,14 @@ class AppGiftHunt(FixedDelivery):
         if any(token in upper_text for token in ('とうろくかんりょう','図鑑に登録されます')):return 'registration',details
         return 'unknown',details
 
-    def navigate_summary(self):
+    def navigate_summary(self,allow_reception_restart=False):
         """Closed-loop upstream menu/party navigation; no reset in recovery.
 
         A is sent only after a menu, selected second slot or Summary context is
         recognized. Late NPC dialogue returns to B cleanup, not blind A presses.
         """
         end=time.monotonic()+self.navigation_timeout
-        serials={};since=time.monotonic();previous=None;stable=0;actions=0;unknown_since=None
+        serials={};since=time.monotonic();previous=None;stable=0;actions=0;unknown_since=None;first_slot_retries=0
         while time.monotonic()<end:
             frames=self.ready()
             if not all(frame.serial>serials.get(key,0) and frame.started is not None and frame.started>=since for key,frame in frames.items()):
@@ -233,6 +245,13 @@ class AppGiftHunt(FixedDelivery):
                 self.engine.stop.wait(.1);continue
             unknown_since=None
             if stable<2:self.engine.stop.wait(.03);continue
+            if state=='party_first':
+                first_slot_retries+=1
+                if allow_reception_restart and first_slot_retries>3:
+                    # No second slot became selectable. Return with B only,
+                    # verify the original field, then try reception once.
+                    self.engine.event('resume_reception_restart',reason='second_slot_not_selectable')
+                    return False
             actions+=1
             if actions>90:raise SafetyStop('情報画面への操作上限です。リセットしません。')
             button,delay={'field':('X',2),'field_dialogue':('B',.5),'registration':('B',.5),
@@ -272,14 +291,17 @@ class AppGiftHunt(FixedDelivery):
                 self.reset_sent=False;self.normal_summary_token=None
                 e.report['round']=e.report['completed_cycles']+1
                 e.status(f'{self.target_name} · {e.report["round"]}周目：受取を開始')
-                if self.resume_pending:
+                resuming=self.resume_pending
+                if resuming:
                     e.report['resumed_from']=str(self.resume_directory)
                     e.event('resume_pending_receipt',source=str(self.resume_directory))
                     self.resume_pending=False
                     e.status('受取済みの個体を引き継ぎ、情報画面へ復旧しています。')
                 else:self.receive()
                 self.clear_receipt()
-                self.navigate_summary()
+                if self.navigate_summary(allow_reception_restart=resuming) is False:
+                    self.clear_receipt()
+                    self.receive();self.clear_receipt();self.navigate_summary()
                 verdict=self.observe_summary(time.monotonic())
                 e.report['fixed_preflight_verified']=False
                 if verdict=='shiny':

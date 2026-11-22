@@ -22,7 +22,9 @@ class NavigationAnchors:
                        if ImageStat.Stat(image.crop(box).convert('L')).stddev[0]>=5 else 1.0
                        for box,reference in templates]
                 for state,templates in self.templates.items()}
-        matches=[state for state,values in scores.items() if all(v<=self.config['threshold'] for v in values)]
+        matches=[state for state,values in scores.items()
+                 if all(v<=self.config['threshold'] for v in values) or
+                 (state=='party' and min(values)<=self.config['threshold'] and self.cursor(image)[0]!=0)]
         return (matches[0] if len(matches)==1 else 'unknown'),scores
 
     @staticmethod
@@ -46,6 +48,9 @@ class NavigationAnchors:
         counts=[red_star_evidence(image,box)['red_pixels']
                 for box in ([0,29,16,49],[170,45,186,65])]
         selected=0
-        if counts[0]>=15 and counts[0]-counts[1]>=12:selected=1
-        if counts[1]>=15 and counts[1]-counts[0]>=12:selected=2
+        # Native first-card art contributes about 59 red pixels even when
+        # unselected; the selected arrow raises it to 104+. The second card's
+        # arrow contributes 23+ pixels. Reject overlap during cursor movement.
+        if counts[0]>=85 and counts[1]<15:selected=1
+        if counts[1]>=15 and counts[0]<85:selected=2
         return selected,counts

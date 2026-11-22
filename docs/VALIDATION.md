@@ -40,7 +40,11 @@ state, unhealthy transport or undecidable Summary still stops without reset.
 An explicit --resume-receipt path can preserve the current pending gift across
 this software update. Before control, it validates source target, pending round,
 no reset of that round, receipt evidence, original field images and current
-site/map/dialogue. A source already shiny, reset, wrong-target or unknown on a
+site/map (with or without the remaining dialogue). A recognized menu/party can
+first be closed with B only; three original-field matches are required before
+A/X navigation. If the second slot remains unselectable after three right
+attempts, reception is retried once from that verified field, without resetting.
+A source already shiny, reset, wrong-target or unknown on a
 real Summary is rejected. The first resumed round skips receive, navigates the
 existing individual to Summary, and may reset only after fresh NORMAL consensus;
 after its return, ordinary continuous reception resumes. Opening the recovery
@@ -50,22 +54,56 @@ Validation:
 
 - 125 offline/loopback tests passed in one run (72.677 s). An additional source-
   rejection regression and the resume normal/shiny test passed afterward (two
-  tests, 2.098 s). I/O/control/colour behavior did not change afterward; only
-  diagnostic text/report fields and documentation changed.
+  tests, 2.098 s). Resume-source counter types were then hardened; the two affected
+  tests passed again (2.065 s). Allowing a same-site closed dialogue was checked
+  with both normal and shiny resume cases (two tests, 3.831 s). The additional menu/one-member recovery regression passed for normal and shiny
+  cases (6.139 s). Colour and reset consensus requirements are unchanged.
+- v1.5.1 complete suite: 128 tests executed in 77.495 s; 124 passed and four
+  loopback socket tests were denied by the sandbox. Those exact four passed
+  outside the network sandbox (0.438 s, localhost only). After the native cursor
+  correction added another regression, all 26 affected navigation/app-loop tests
+  passed (55.731 s). The current suite contains 129 test methods.
 - Regressions cover a lost X/menu A/right/party A/context A, late dialogue after X,
   resuming an already-received normal/shiny gift, and rejection of unsafe sources.
 - Native Tk + local Vision + loopback Chiruno/Luma: ordinary normal round 147
   datagrams/reset one; late-dialogue automatic recovery 161/reset one; pending
   normal resume 63/reset one; pending shiny resume 42/reset zero. Timers shortened.
 - Saved native images classify as NPC dialogue, menu, first party slot and Summary.
+  During live one-member recovery, the two footer labels blink independently;
+  navigation accepts one textured matching footer plus an unambiguous red party
+  cursor. Neither evidence alone is accepted. This has no colour/reset authority.
   The current dim map's red-frame mismatch is .00838 (limit .13); unrelated menu,
   party and Summary mismatch >.84. This is saved-image evidence, not live control.
 - Native English GUI regression passed in dry-run with controller packets zero.
 
-No new console connection/input/reset was performed by Codex. The v1.5 recovery
-has not yet been run on this physical pending individual, and overnight stability
-has not been verified. Native shiny accuracy and native Type: Null Poni remain
+Native follow-up used only the installed Mac app UI; no CLI tool connected to
+or controlled the physical 3DS. The initial recovery found only the saved party
+member (the earlier gift was no longer present), returned to the original field
+with B, retried reception and obtained Poipole. Real first-card art contributes
+about 59 red pixels while unselected and 104+ when selected; second-slot arrow
+samples were 23–57 pixels. Cursor classification was corrected to reject overlap
+and distinguish this art from the arrow. Normal Summary consensus and final
+normal confirmation then produced one reset. That session stopped at the title
+after a >2 s receive gap; no additional reset was sent.
+
+At approximately 11:28 JST the operator manually restarted the app, with cycle
+limit zero. Its new native session subsequently completed two ordinary normal
+rounds and entered round three without a safe-stop event. Both completed rounds
+had three NORMAL/name-matched Summary pairs plus a fourth final normal check;
+saved-field return scores were .0017–.0045 (limit .05). This confirms the native
+Poipole receive/Summary/reset/return loop with the cursor correction, not
+indefinite unattended reliability. The in-app fail-closed transport limits remain
+unchanged. An unfinished post-reset reconnect experiment was removed rather
+than shipping an unused recovery path. Hourly checks were separately enabled in
+the Codex app at the user's request; a real outage can still stop the hunt before
+that scheduled review. Native shiny accuracy and native Type: Null Poni remain
 unverified. No fake calibration or hardware-validation attestation was issued.
+
+A resumed session also persists the verified original pre-gift baseline and
+receipt evidence in its new folder, rather than leaving the passive menu/party
+capture under the baseline filenames. The affected normal/shiny recovery tests
+passed again (two tests, 10.135 s). This persistence correction applies on the
+next launch and does not require interrupting a running ordinary hunt.
 
 ## 2026-11-22: 17 native rounds, then unresponsive start (v1.4.5)
 

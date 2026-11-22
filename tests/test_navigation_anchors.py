@@ -32,6 +32,24 @@ class NavigationAnchorTests(unittest.TestCase):
         draw.rectangle((3,32,11,42),fill=(40,120,90))
         self.assertEqual(self.nav.cursor(image)[0],2)
 
+    def test_native_card_red_art_does_not_hide_second_slot_arrow(self):
+        image=self.fixture('party');draw=ImageDraw.Draw(image)
+        draw.rectangle((0,29,4,39),fill=(230,35,20))  # 55 non-cursor red pixels
+        self.assertEqual(self.nav.cursor(image)[0],0)
+        draw.rectangle((173,48,177,53),fill=(230,35,20))  # second arrow
+        self.assertEqual(self.nav.cursor(image)[0],2)
+        draw.rectangle((5,29,9,39),fill=(230,35,20))  # both arrows: transition
+        self.assertEqual(self.nav.cursor(image)[0],0)
+
+    def test_party_can_use_one_visible_label_and_unambiguous_cursor(self):
+        image=self.fixture('party')
+        image.paste((60,100,130),self.nav.config['states']['party'][1]['box'])
+        self.assertEqual(self.nav.identify(image)[0],'unknown')
+        ImageDraw.Draw(image).rectangle((3,32,11,42),fill=(230,35,20))
+        self.assertEqual(self.nav.identify(image)[0],'party')
+        image.paste((60,100,130),self.nav.config['states']['party'][0]['box'])
+        self.assertEqual(self.nav.identify(image)[0],'unknown')
+
     def test_map_mask_survives_dimming_but_rejects_menus(self):
         with Image.open(ROOT.parent/'Diagnostics/field_hud.png') as hud:
             field=Image.new('RGB',(320,240));field.paste(hud,(0,0))

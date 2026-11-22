@@ -289,13 +289,13 @@ class AppLoopTests(unittest.TestCase):
                 self.assertEqual(e.report['controller_packets'],(len(NAV)+7)*PACKETS)
 
     def test_resume_pending_gift_does_not_reset_or_receive_before_summary(self):
-        for shiny in (False,True):
-            with self.subTest(shiny=shiny),tempfile.TemporaryDirectory() as td:
+        for shiny,late in ((False,False),(True,False),(False,True),(True,True)):
+            with self.subTest(shiny=shiny,late=late),tempfile.TemporaryDirectory() as td:
                 e=self.engine(td,shiny);source=Path(td)/'previous';source.mkdir()
                 for key in ('0','1'):e.store.snapshot(int(key)).image.save(source/f'fixed-baseline-{key}.png')
                 (source/'received-message.png').write_bytes(b'receipt evidence')
                 (source/'report.json').write_text(json.dumps(dict(mode='app_gift_hunt',target='poipole',round=1,completed_cycles=0,reset_attempts=0,summary_verdict='unknown',summary_scores={'context':[]})))
-                e.store.state=13;e.store.late_dialogue=True
+                e.store.state=13;e.store.late_dialogue=late
                 runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2)
                 class ClearDialogue(Controller):
                     def return_control(self):
@@ -306,17 +306,55 @@ class AppLoopTests(unittest.TestCase):
                 with patch('app_gift_hunt.MacOCR',return_value=OCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
                     runner.start(True,True,True,stop_at_summary=False);e.player.join(10)
                 self.assertFalse(e.player.is_alive())
-                self.assertEqual(ir.down[0],HIDButtons.B)
+                self.assertEqual(ir.down[0],HIDButtons.B if late else HIDButtons.X)
                 self.assertEqual(e.report['summary_verdict'],'shiny' if shiny else 'normal',e.report)
                 self.assertEqual(e.report['reset_attempts'],0 if shiny else 1)
                 self.assertEqual(e.report['completed_cycles'],0 if shiny else 1)
+
+    def test_resume_from_party_with_no_selectable_second_slot_restarts_reception_once(self):
+        for shiny in (False,True):
+            with self.subTest(shiny=shiny),tempfile.TemporaryDirectory() as td:
+                e=self.engine(td,shiny);source=Path(td)/'previous';source.mkdir()
+                for key in ('0','1'):e.store.snapshot(int(key)).image.save(source/f'fixed-baseline-{key}.png')
+                (source/'received-message.png').write_bytes(b'receipt evidence')
+                (source/'report.json').write_text(json.dumps(dict(mode='app_gift_hunt',target='poipole',round=1,completed_cycles=0,reset_attempts=0,summary_verdict='unknown',summary_scores={'context':[]})))
+                e.store.state=15
+                runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2)
+                class OneMemberRecovery(Controller):
+                    missing=True
+                    rights=0
+                    def return_control(self):
+                        if self.game.state==15 and self.missing:
+                            if self.last==HIDButtons.DPADRIGHT:self.rights+=1;self.last=0
+                            elif self.last==HIDButtons.B:
+                                self.game.state=13;self.last=0
+                                if self.rights>=3:self.missing=False
+                        elif self.game.state==13 and self.last==HIDButtons.A:
+                            self.game.state=1;self.last=0
+                        super().return_control()
+                ir=OneMemberRecovery(e.store)
+                class PartyOCR(OCR):
+                    def read(self,image,**options):
+                        if self.game.state==15:return []
+                        return super().read(image,**options)
+                with patch('app_gift_hunt.MacOCR',return_value=PartyOCR(e.store,'ベベノム')),patch('app_gift_hunt.LumaInputServer',return_value=ir),patch.object(runner,'wait'):
+                    runner.start(True,True,True,stop_at_summary=False);e.player.join(12)
+                self.assertFalse(e.player.is_alive(),e.report)
+                self.assertTrue(ir.down,e.report)
+                self.assertEqual(ir.down[0],HIDButtons.B)
+                self.assertEqual(ir.rights,3)
+                for key in ('0','1'):
+                    with Image.open(e.directory/f'fixed-baseline-{key}.png') as image:
+                        self.assertEqual(image.convert('RGB').tobytes(),runner.baseline[key].tobytes())
+                self.assertEqual(e.report['summary_verdict'],'shiny' if shiny else 'normal',e.report)
+                self.assertEqual(e.report['reset_attempts'],0 if shiny else 1)
 
     def test_resume_rejects_shiny_summary_and_already_reset_sources(self):
         with tempfile.TemporaryDirectory() as td:
             e=self.engine(td);source=Path(td)/'previous';source.mkdir()
             (source/'received-message.png').write_bytes(b'receipt')
             base=dict(mode='app_gift_hunt',target='poipole',round=1,completed_cycles=0,reset_attempts=0,summary_verdict='unknown',summary_scores={'context':[]})
-            for change in ({'summary_verdict':'shiny'},{'reset_attempts':1},{'summary_scores':{'context':['経験値','次のレベル']}},{'target':'typenull_poni'}):
+            for change in ({'summary_verdict':'shiny'},{'reset_attempts':1},{'summary_scores':{'context':['経験値','次のレベル']}},{'target':'typenull_poni'},{'completed_cycles':None},{'completed_cycles':False,'reset_attempts':False}):
                 with self.subTest(change=change):
                     (source/'report.json').write_text(json.dumps(dict(base,**change)))
                     runner=AppGiftHunt(e,resume_directory=source);runner.start();e.player.join(2)
